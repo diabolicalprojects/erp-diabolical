@@ -278,7 +278,8 @@ const inputStyle = {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 const CustomQuoteBuilder = ({ isOpen, onClose }) => {
-    const { customers, quotes, setQuotes, quoteSettings } = useApp();
+    const { customers, quoteSettings, addQuote } = useApp();
+    const [isSaving, setIsSaving] = useState(false);
     const [step, setStep] = useState(1); // 1 = cliente, 2 = ítems
     const [selectedCustomer, setSelectedCustomer] = useState('');
     const [customCustomer, setCustomCustomer] = useState('');
@@ -343,26 +344,36 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
     // ── Validación ──
     const hasErrors = items.some(i => !i.name.trim() || i.unitPrice === 0);
 
-    // ── Guardar ──
-    const handleSave = () => {
-        const newQuote = {
-            id: `COT-${Date.now().toString().slice(-5)}`,
-            customer: customerName,
-            date: new Date().toLocaleDateString('es-MX'),
-            amount: total,
-            status: 'sent',
-            type: 'custom',
-            notes,
-            items: items.map(({ id, name, description, quantity, unitPrice, discount, type, unit }) => ({
-                id, name, description, quantity,
-                price: unitPrice, discount, type, unit
-            }))
-        };
-        setQuotes([newQuote, ...quotes]);
-        setSaved(true);
-        setTimeout(() => {
-            onClose();
-        }, 1400);
+    // ── Guardar (persiste en MongoDB via API) ──
+    const handleSave = async () => {
+        if (isSaving) return;
+        setIsSaving(true);
+        try {
+            const newQuote = {
+                customer: customerName,
+                date: new Date().toISOString(),
+                amount: total,
+                status: 'sent',
+                type: 'custom',
+                notes,
+                items: items.map(({ name, description, quantity, unitPrice, discount, type }) => ({
+                    name,
+                    description: description || '',
+                    quantity: Number(quantity) || 1,
+                    price: Number(unitPrice) || 0,
+                    discount: Number(discount) || 0,
+                    type: (type === 'custom' ? 'service' : type)
+                }))
+            };
+            await addQuote(newQuote);
+            setSaved(true);
+            setTimeout(() => { onClose(); }, 1400);
+        } catch (err) {
+            console.error('Error guardando cotización:', err);
+            alert('Error al guardar la cotización. Intenta de nuevo.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -625,18 +636,18 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                 <button
                                                     onClick={handleSave}
-                                                    disabled={items.length === 0 || hasErrors || saved}
+                                                    disabled={items.length === 0 || hasErrors || saved || isSaving}
                                                     style={{
                                                         width: '100%', padding: '12px', borderRadius: '12px', cursor: 'pointer',
-                                                        background: saved ? 'rgba(16,185,129,0.15)' : 'var(--text-primary)',
-                                                        color: saved ? '#34d399' : 'var(--bg-black)',
+                                                        background: saved ? 'rgba(16,185,129,0.15)' : isSaving ? 'rgba(255,255,255,0.1)' : 'var(--text-primary)',
+                                                        color: saved ? '#34d399' : isSaving ? 'var(--text-secondary)' : 'var(--bg-black)',
                                                         border: saved ? '1px solid #34d399' : 'none',
                                                         fontWeight: 800, fontSize: '0.88rem', opacity: (items.length === 0 || hasErrors) && !saved ? 0.4 : 1,
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                                                         transition: 'all 0.3s'
                                                     }}
                                                 >
-                                                    {saved ? <><CheckCircle size={16} /> ¡Cotización guardada!</> : <><Save size={15} /> Guardar Cotización</>}
+                                                    {saved ? <><CheckCircle size={16} /> ¡Cotización guardada!</> : isSaving ? 'Guardando...' : <><Save size={15} /> Guardar Cotización</>}
                                                 </button>
                                                 <button
                                                     onClick={() => setStep(1)}

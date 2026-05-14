@@ -44,12 +44,19 @@ const QuoteWizard = ({ isOpen, onClose }) => {
         setIsSubmitting(true);
         try {
             const newQuote = {
-                id: `COT-${Date.now().toString().slice(-4)}`,
                 customer: formData.customer,
-                items: formData.items,
+                items: formData.items.map(item => ({
+                    name: item.name,
+                    price: Number(item.price) || 0,
+                    quantity: Number(item.quantity) || 1,
+                    type: item.type || 'product',
+                    description: item.description || '',
+                    discount: Number(item.discount) || 0
+                })),
                 amount: calculateTotal(),
-                date: new Date().toLocaleDateString(),
-                status: 'sent'
+                date: new Date().toISOString(),
+                status: 'sent',
+                type: 'quick'
             };
             
             await addQuote(newQuote);
@@ -59,7 +66,7 @@ const QuoteWizard = ({ isOpen, onClose }) => {
             setFormData({ customer: '', items: [], status: 'sent' });
         } catch (error) {
             console.error("Error creating quote:", error);
-            // Handle error, optionally show a toast or alert
+            alert('Error al guardar la cotización. Revisa que el cliente esté seleccionado y los items sean válidos.');
         } finally {
             setIsSubmitting(false);
         }
