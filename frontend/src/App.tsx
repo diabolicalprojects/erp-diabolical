@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useApp, AppProvider } from './context/AppContext';
 import {
-  LayoutDashboard, Users, FileText, Package, BarChart3, Settings, Menu, X, Plus,
+  LayoutDashboard, Users, FileText, Package, BarChart3, Settings as SettingsIcon, Menu, X, Plus,
   TrendingUp, Briefcase, Sun, Moon, ShoppingBag, Wallet, Shield, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,6 +18,7 @@ import Metrics from './components/Metrics/Metrics';
 import Purchases from './components/Purchases/Purchases';
 import Finances from './components/Finances/Finances';
 import Roles from './components/Roles/Roles';
+import Settings from './components/Settings/Settings';
 import Login from './pages/Login';
 
 const Dashboard = () => {
@@ -128,6 +129,7 @@ const Sidebar = ({ isOpen, toggleSidebar }: { isOpen: boolean; toggleSidebar: ()
     { name: 'Compras', icon: <ShoppingBag size={20} />, path: '/compras' },
     { name: 'Finanzas', icon: <Wallet size={20} />, path: '/finanzas' },
     { name: 'Métricas', icon: <BarChart3 size={20} />, path: '/metricas' },
+    { name: 'Configuración', icon: <SettingsIcon size={20} />, path: '/configuracion' },
     { name: 'Seguridad', icon: <Shield size={20} />, path: '/seguridad' },
   ];
 
@@ -260,6 +262,7 @@ const AppContent = () => {
                         <Route path="/compras" element={<Purchases />} />
                         <Route path="/finanzas" element={<Finances />} />
                         <Route path="/metricas" element={<Metrics />} />
+                        <Route path="/configuracion" element={<Settings />} />
                         <Route path="/seguridad" element={<Roles />} />
                       </Routes>
                     </AnimatePresence>

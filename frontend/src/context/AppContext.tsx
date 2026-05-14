@@ -158,6 +158,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   // Quote CRUD
+  const addQuote = async (data: any) => {
+    const res = await quotesAPI.create(data);
+    setQuotes([res.data, ...quotes]);
+    return res.data;
+  };
+
   const deleteQuote = async (id: string) => {
     await quotesAPI.delete(id);
     setQuotes(quotes.filter(q => q._id !== id));
@@ -204,7 +210,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       customers, addCustomer, updateCustomer, deleteCustomer,
       projects, setProjects,
       tracking, toggleTracking,
-      quotes, setQuotes, deleteQuote,
+      quotes, setQuotes, addQuote, deleteQuote,
       deals, setDeals, addDeal, deleteDeal, moveDeal,
       purchases, setPurchases, vendors, setVendors, receiveOrder,
       receivables, setReceivables, registerPayment,

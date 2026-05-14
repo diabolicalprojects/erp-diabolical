@@ -4,7 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
 
 const QuoteWizard = ({ isOpen, onClose }) => {
-    const { customers, inventory, services, quotePresets, setQuotes, quotes } = useApp();
+    const { customers, addCustomer, inventory, services, quotePresets, setQuotes, quotes, addQuote } = useApp();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
+    const [showNewCustomer, setShowNewCustomer] = useState(false);
     const [step, setStep] = useState(1);
     const [activeTab, setActiveTab] = useState('products'); // 'products', 'services', 'presets'
     const [formData, setFormData] = useState({
@@ -37,19 +40,44 @@ const QuoteWizard = ({ isOpen, onClose }) => {
         return formData.items.reduce((acc, item) => acc + (item.price * (item.quantity || 1)), 0);
     };
 
-    const handleFinish = () => {
-        const newQuote = {
-            id: `COT-${Date.now().toString().slice(-4)}`,
-            customer: formData.customer,
-            items: formData.items,
-            amount: calculateTotal(),
-            date: new Date().toLocaleDateString(),
-            status: 'sent'
-        };
-        setQuotes([newQuote, ...quotes]);
-        onClose();
-        setStep(1);
-        setFormData({ customer: '', items: [], status: 'sent' });
+    const handleFinish = async () => {
+        setIsSubmitting(true);
+        try {
+            const newQuote = {
+                id: `COT-${Date.now().toString().slice(-4)}`,
+                customer: formData.customer,
+                items: formData.items,
+                amount: calculateTotal(),
+                date: new Date().toLocaleDateString(),
+                status: 'sent'
+            };
+            
+            await addQuote(newQuote);
+            
+            onClose();
+            setStep(1);
+            setFormData({ customer: '', items: [], status: 'sent' });
+        } catch (error) {
+            console.error("Error creating quote:", error);
+            // Handle error, optionally show a toast or alert
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCreateCustomer = async () => {
+        if (!newCustomer.name) return;
+        setIsSubmitting(true);
+        try {
+            await addCustomer({ ...newCustomer, status: 'potencial' });
+            setFormData({ ...formData, customer: newCustomer.name });
+            setShowNewCustomer(false);
+            setNewCustomer({ name: '', email: '', phone: '' });
+        } catch (error) {
+            console.error("Error creating customer:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -97,7 +125,7 @@ const QuoteWizard = ({ isOpen, onClose }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
                             {customers.map(c => (
                                 <button
-                                    key={c.id}
+                                    key={c._id || c.id}
                                     className={`glass-card item-card ${formData.customer === c.name ? 'selected' : ''}`}
                                     style={{
                                         textAlign: 'left',
@@ -107,7 +135,7 @@ const QuoteWizard = ({ isOpen, onClose }) => {
                                         border: formData.customer === c.name ? '2px solid var(--text-primary)' : '1px solid var(--glass-border)',
                                         transition: 'all 0.2s ease'
                                     }}
-                                    onClick={() => setFormData({ ...formData, customer: c.name })}
+                                    onClick={() => { setFormData({ ...formData, customer: c.name }); setShowNewCustomer(false); }}
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                         <h4 style={{ margin: 0, color: formData.customer === c.name ? 'var(--bg-black)' : 'var(--text-primary)', fontWeight: 700 }}>{c.name}</h4>
@@ -118,11 +146,76 @@ const QuoteWizard = ({ isOpen, onClose }) => {
                                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', opacity: 1, margin: 0, fontWeight: 500 }}>{c.email}</p>
                                 </button>
                             ))}
+                            <button
+                                className={`glass-card item-card ${showNewCustomer ? 'selected' : ''}`}
+                                style={{
+                                    textAlign: 'left',
+                                    padding: '1.2rem',
+                                    cursor: 'pointer',
+                                    background: showNewCustomer ? 'var(--text-primary)' : 'var(--glass)',
+                                    border: showNewCustomer ? '2px solid var(--text-primary)' : '1px dashed var(--glass-border)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s ease',
+                                    color: showNewCustomer ? 'var(--bg-black)' : 'var(--text-primary)'
+                                }}
+                                onClick={() => { setShowNewCustomer(true); setFormData({ ...formData, customer: '' }); }}
+                            >
+                                <Plus size={24} style={{ marginBottom: '8px' }} />
+                                <h4 style={{ margin: 0, fontWeight: 700 }}>Otro Cliente (Nuevo)</h4>
+                            </button>
                         </div>
+
+                        <AnimatePresence>
+                            {showNewCustomer && (
+                                <motion.div 
+                                    initial={{ opacity: 0, height: 0 }} 
+                                    animate={{ opacity: 1, height: 'auto' }} 
+                                    exit={{ opacity: 0, height: 0 }}
+                                    style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}
+                                >
+                                    <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>Datos del Nuevo Cliente</h4>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Nombre / Razón Social *</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-input" 
+                                                value={newCustomer.name} 
+                                                onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} 
+                                                placeholder="Ej. Empresa SA de CV"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Email</label>
+                                            <input 
+                                                type="email" 
+                                                className="form-input" 
+                                                value={newCustomer.email} 
+                                                onChange={e => setNewCustomer({...newCustomer, email: e.target.value})} 
+                                                placeholder="Ej. contacto@empresa.com"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                        <button 
+                                            className="btn-primary" 
+                                            onClick={handleCreateCustomer}
+                                            disabled={!newCustomer.name || isSubmitting}
+                                        >
+                                            {isSubmitting ? 'Guardando...' : 'Guardar y Seleccionar Cliente'}
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
                         <div style={{ marginTop: '2.5rem', display: 'flex', justifyContent: 'flex-end' }}>
                             <button
                                 className="btn-primary"
-                                disabled={!formData.customer}
+                                disabled={!formData.customer || isSubmitting}
                                 onClick={() => setStep(2)}
                                 style={{ padding: '0.8rem 2.5rem' }}
                             >
@@ -262,10 +355,10 @@ const QuoteWizard = ({ isOpen, onClose }) => {
                                 <button
                                     className="btn-primary"
                                     style={{ width: '100%', padding: '1rem', fontWeight: 800, letterSpacing: '0.02em' }}
-                                    disabled={formData.items.length === 0}
+                                    disabled={formData.items.length === 0 || isSubmitting}
                                     onClick={handleFinish}
                                 >
-                                    Confirmar y Finalizar Folio
+                                    {isSubmitting ? 'Guardando...' : 'Confirmar y Finalizar Folio'}
                                 </button>
                             </div>
                         </div>
