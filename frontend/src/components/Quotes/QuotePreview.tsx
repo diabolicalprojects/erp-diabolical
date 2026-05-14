@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
     X, Printer, Building2, Edit3, CheckCircle,
-    User, FileText, Tag, Landmark, RotateCcw, ChevronDown, ChevronUp
+    User, FileText, Tag, Landmark, RotateCcw, ChevronDown, ChevronUp, Save, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
+import { settingsAPI } from '../../services/api';
 
 // ─── Formateo numérico ────────────────────────────────────────────────────────
 const fmt = (n) =>
@@ -55,9 +56,33 @@ const DocDetailRow = ({ label, children }) => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 const QuotePreview = ({ quote, isOpen, onClose }) => {
-    const { quoteSettings } = useApp();
+    const { quoteSettings, setQuoteSettings } = useApp();
     const [editMode, setEditMode] = useState(false);
     const [ed, setEd] = useState({});
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveToast, setSaveToast] = useState<{ type: string; text: string } | null>(null);
+
+    const handleSaveSettings = async () => {
+        setIsSaving(true);
+        try {
+            const payload = {
+                companyName: ed.companyName, companyAddress: ed.companyAddress,
+                companyRFC: ed.companyRFC, companyPhone: ed.companyPhone,
+                companyEmail: ed.companyEmail, companyWebsite: ed.companyWebsite,
+                bankName: ed.bankName, bankHolder: ed.bankHolder,
+                bankCLABE: ed.bankCLABE, bankAccount: ed.bankAccount,
+                bankReference: ed.bankReference
+            };
+            const res = await settingsAPI.updateQuote(payload);
+            setQuoteSettings(res.data);
+            setSaveToast({ type: 'success', text: '¡Guardado en configuración!' });
+        } catch {
+            setSaveToast({ type: 'error', text: 'Error al guardar.' });
+        } finally {
+            setIsSaving(false);
+            setTimeout(() => setSaveToast(null), 3000);
+        }
+    };
 
     // Reinillar el estado cuando se abre una cotización diferente
     useEffect(() => {
@@ -242,6 +267,44 @@ const QuotePreview = ({ quote, isOpen, onClose }) => {
                                         <PanelField label="N° de cuenta" value={ed.bankAccount} onChange={s('bankAccount')} mono />
                                         <PanelField label="Referencia o Concepto" value={ed.bankReference} onChange={s('bankReference')} />
                                     </PanelSection>
+
+                                    {/* Save to Settings Button */}
+                                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                                        <AnimatePresence>
+                                            {saveToast && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                                                    style={{
+                                                        marginBottom: '10px', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700,
+                                                        background: saveToast.type === 'success' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                                                        color: saveToast.type === 'success' ? '#059669' : '#dc2626',
+                                                        border: `1px solid ${saveToast.type === 'success' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                                                        display: 'flex', alignItems: 'center', gap: '6px'
+                                                    }}
+                                                >
+                                                    {saveToast.type === 'success' ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+                                                    {saveToast.text}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                        <button
+                                            onClick={handleSaveSettings}
+                                            disabled={isSaving}
+                                            style={{
+                                                width: '100%', padding: '10px', borderRadius: '9px', border: 'none',
+                                                background: isSaving ? '#e2e8f0' : '#111827', color: isSaving ? '#94a3b8' : '#fff',
+                                                fontWeight: 800, fontSize: '0.82rem', cursor: isSaving ? 'not-allowed' : 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <Save size={14} />
+                                            {isSaving ? 'Guardando...' : 'Guardar datos en Configuración'}
+                                        </button>
+                                        <p style={{ margin: '6px 0 0', fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center', lineHeight: 1.4 }}>
+                                            Actualiza los datos de tu empresa y banco permanentemente.
+                                        </p>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}
