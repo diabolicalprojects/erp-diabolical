@@ -46,6 +46,17 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/settings', settingsRoutes);
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    name: 'ERP Diabolical API',
+    version: '1.0.0',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    endpoints: '/api/auth | /api/customers | /api/deals | /api/quotes | /api/inventory | /api/purchases | /api/dashboard | /api/metrics'
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
