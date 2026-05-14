@@ -32,7 +32,7 @@ async function seed() {
 
     // Admin user
     await User.create({
-      email: 'alonso.diabolicalservices.tech',
+      email: 'alonso@diabolicalservices.tech',
       password: 'Alonso090318M',
       name: 'Alonso Admin',
       role: 'admin'
