@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Lock, Mail, AlertCircle } from 'lucide-react';
 import LogoBlanco from '../assets/LOGO-DIABOLICAL-CUADRADO-BLANCO.svg';
 
 const Login = () => {
   const { login } = useApp();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,6 +20,7 @@ const Login = () => {
 
     try {
       await login(email, password);
+      navigate('/', { replace: true }); // ← redirect to dashboard after login
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al iniciar sesión');
     } finally {
