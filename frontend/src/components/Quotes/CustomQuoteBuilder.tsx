@@ -278,7 +278,7 @@ const inputStyle = {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 const CustomQuoteBuilder = ({ isOpen, onClose }) => {
-    const { customers, quoteSettings, addQuote } = useApp();
+    const { customers, quoteSettings, addQuote, addCustomer } = useApp();
     const [isSaving, setIsSaving] = useState(false);
     const [step, setStep] = useState(1); // 1 = cliente, 2 = ítems
     const [selectedCustomer, setSelectedCustomer] = useState('');
@@ -349,6 +349,21 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
         if (isSaving) return;
         setIsSaving(true);
         try {
+            // Si es un cliente nuevo (no existente en la BD), lo creamos primero
+            const isNewCustomer = selectedCustomer === '__custom__' && customCustomer.trim();
+            if (isNewCustomer) {
+                const alreadyExists = customers.some(
+                    c => c.name?.toLowerCase() === customCustomer.trim().toLowerCase()
+                );
+                if (!alreadyExists) {
+                    // Crea el cliente con solo el nombre; el usuario puede editar el resto despues
+                    await addCustomer({
+                        name: customCustomer.trim(),
+                        status: 'potencial'
+                    });
+                }
+            }
+
             const newQuote = {
                 customer: customerName,
                 date: new Date().toISOString(),

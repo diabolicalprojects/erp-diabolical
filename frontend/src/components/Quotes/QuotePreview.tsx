@@ -101,7 +101,7 @@ const QuotePreview = ({ quote, isOpen, onClose }) => {
                 clientAddress: quote.clientAddress || '',
                 clientContact: quote.clientContact || '',
                 // Cotización
-                quoteId: quote.id || '',
+                quoteId: quote.folio || quote._id || '',
                 quoteDate: quote.date || '',
                 quoteValidity: quoteSettings.validityDays || 30,
                 quoteCurrency: quoteSettings.currency || 'MXN',
@@ -179,7 +179,19 @@ const QuotePreview = ({ quote, isOpen, onClose }) => {
                         )}
                     </div>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <button onClick={() => window.print()} style={{ height: '38px', padding: '0 20px', borderRadius: '9px', cursor: 'pointer', border: 'none', background: '#111827', color: '#fff', fontWeight: 800, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.96)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
+                        <button
+                            onClick={() => {
+                                const folio = quote.folio || quote._id || 'cotizacion';
+                                const prevTitle = document.title;
+                                document.title = folio;
+                                window.print();
+                                // Restaurar título después de imprimir
+                                setTimeout(() => { document.title = prevTitle; }, 500);
+                            }}
+                            style={{ height: '38px', padding: '0 20px', borderRadius: '9px', cursor: 'pointer', border: 'none', background: '#111827', color: '#fff', fontWeight: 800, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', transition: 'transform 0.1s' }}
+                            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.96)'}
+                            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                        >
                             <Printer size={16} /> Exportar PDF
                         </button>
                         <button onClick={onClose} style={{ width: '38px', height: '38px', borderRadius: '50%', border: 'none', background: '#f1f5f9', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s, color 0.2s' }} onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#1e293b'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}>
