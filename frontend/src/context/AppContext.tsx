@@ -162,6 +162,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const addQuote = async (data: any) => {
     const res = await quotesAPI.create(data);
     setQuotes([res.data, ...quotes]);
+
+    // The backend may have auto-created a Deal for this customer (PRD §3).
+    // Reload deals so the Pipeline reflects the new card immediately.
+    try {
+      const dealRes = await dealsAPI.getAll();
+      setDeals(dealRes.data);
+    } catch (_) {
+      // Non-critical — pipeline will update on next navigation
+    }
+
     return res.data;
   };
 
