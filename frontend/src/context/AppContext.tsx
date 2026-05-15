@@ -133,7 +133,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     setDeals({ ...deals, [stage]: (deals[stage] || []).filter((d: any) => d._id !== id) });
   };
   const moveDeal = async (dealData: any, fromStage: string, toStage: string) => {
-    const res = await dealsAPI.update(dealData._id, { stage: toStage });
+    // Use PATCH /stage — triggers PRD §4A validation + §4B event chain
+    const res = await dealsAPI.patchStage(dealData._id, toStage);
     setDeals({
       ...deals,
       [fromStage]: (deals[fromStage] || []).filter((d: any) => d._id !== dealData._id),

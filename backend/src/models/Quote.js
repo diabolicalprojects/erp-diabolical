@@ -12,6 +12,8 @@ const quoteItemSchema = new mongoose.Schema({
 const quoteSchema = new mongoose.Schema({
   folio: { type: String, required: true, unique: true },
   customer: { type: String, required: true },
+  // Reference to Deal — links quotes to their pipeline deal (PRD §3)
+  deal_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
   date: { type: Date, default: Date.now },
   amount: { type: Number, default: 0 },
   status: { type: String, enum: ['draft', 'sent', 'accepted', 'rejected'], default: 'draft' },

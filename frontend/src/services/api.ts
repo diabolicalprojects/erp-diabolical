@@ -52,8 +52,11 @@ export const customersAPI = {
 // Deals
 export const dealsAPI = {
   getAll: () => api.get('/deals'),
+  getOne: (id: string) => api.get(`/deals/${id}`),
   create: (data: any) => api.post('/deals', data),
   update: (id: string, data: any) => api.put(`/deals/${id}`, data),
+  // PRD §4A & §4B — Stage change with validation + event trigger
+  patchStage: (id: string, stage: string) => api.patch(`/deals/${id}/stage`, { stage }),
   delete: (id: string) => api.delete(`/deals/${id}`),
 };
 
@@ -126,6 +129,8 @@ export const tasksAPI = {
 // Metrics
 export const metricsAPI = {
   get: () => api.get('/metrics'),
+  // PRD §4C — MongoDB aggregation summary (admin + finanzas only)
+  executiveSummary: () => api.get('/metrics/executive-summary'),
 };
 
 // Roles

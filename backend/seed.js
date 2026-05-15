@@ -13,7 +13,12 @@ const Project = require('./src/models/Project');
 const Task = require('./src/models/Task');
 const QuoteSettings = require('./src/models/QuoteSettings');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:utwb9mswsqz0q29r@erp-diabolical-erpdb-dlczk6:27017';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+
+// ─── Admin credentials — set via env vars, NEVER hardcode here ───────────────
+const ADMIN_EMAIL    = process.env.SEED_ADMIN_EMAIL    || 'admin@diabolicalservices.tech';
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'ChangeMe!2024';
+const ADMIN_NAME     = process.env.SEED_ADMIN_NAME     || 'Admin Diabolical';
 
 async function seed() {
   try {
@@ -37,14 +42,14 @@ async function seed() {
     ]);
     console.log('🗑️  Todas las colecciones limpiadas');
 
-    // ─── SOLO USUARIO ADMINISTRADOR ───────────────────────────────────────────
+    // ─── USUARIO ADMINISTRADOR ────────────────────────────────────────────────
     await User.create({
-      email: 'alonso@diabolicalservices.tech',
-      password: 'Alonso090318M',
-      name: 'Alonso Admin',
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      name: ADMIN_NAME,
       role: 'admin'
     });
-    console.log('👤 Usuario admin creado: alonso@diabolicalservices.tech');
+    console.log(`👤 Usuario admin creado: ${ADMIN_EMAIL}`);
 
     console.log('\n✅ Base de datos lista — sin datos de prueba');
     console.log('   El sistema está vacío y listo para uso real.\n');
@@ -56,3 +61,4 @@ async function seed() {
 }
 
 seed();
+

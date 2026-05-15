@@ -5,6 +5,12 @@ const helmet = require('helmet');
 const connectDB = require('./config/db');
 const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
 const { sanitizeInput } = require('./middleware/sanitize');
+const auth = require('./middleware/auth');
+const verifyRole = require('./middleware/verifyRole');
+
+// ─── BOOT EVENT LISTENERS ─────────────────────────────────────────────────────
+// Must be required BEFORE routes so listeners are registered at startup
+require('./listeners/dealClosedListener');
 
 // Route imports
 const authRoutes = require('./routes/auth');
@@ -49,7 +55,7 @@ app.use(cors({
     return callback(new Error(`Origen no permitido por CORS: ${origin}`), false);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -74,14 +80,19 @@ app.use('/api/quotes', quoteRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/vendors', vendorRoutes);
-app.use('/api/receivables', receivableRoutes);
-app.use('/api/payables', payableRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/metrics', metricsRoutes);
-app.use('/api/roles', rolesRoutes);
 app.use('/api/settings', settingsRoutes);
+
+// ─── RBAC-PROTECTED ROUTES (PRD §5) ──────────────────────────────────────────
+// Finance data: admin + finanzas only
+app.use('/api/receivables', auth, verifyRole('admin', 'finanzas'), receivableRoutes);
+app.use('/api/payables',    auth, verifyRole('admin', 'finanzas'), payableRoutes);
+// Metrics with cost data: admin + finanzas only
+app.use('/api/metrics',     auth, verifyRole('admin', 'finanzas'), metricsRoutes);
+// User/role management: admin only
+app.use('/api/roles',       auth, verifyRole('admin'), rolesRoutes);
 
 // ─── ROOT ROUTE ───────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
