@@ -2,6 +2,7 @@ const express = require('express');
 const Quote = require('../models/Quote');
 const Deal = require('../models/Deal');
 const Customer = require('../models/Customer');
+const QuoteSettings = require('../models/QuoteSettings');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -10,6 +11,41 @@ router.get('/', auth, async (req, res) => {
   try {
     const quotes = await Quote.find().sort({ createdAt: -1 });
     res.json(quotes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET public quote (no auth required)
+router.get('/public/:id', async (req, res) => {
+  try {
+    const quote = await Quote.findById(req.params.id);
+    if (!quote) return res.status(404).json({ error: 'Cotización no encontrada' });
+    
+    // Fetch company settings but only return public info
+    const settings = await QuoteSettings.findOne() || {};
+    
+    res.json({
+      quote,
+      settings: {
+        companyName: settings.companyName,
+        companyAddress: settings.companyAddress,
+        companyRFC: settings.companyRFC,
+        companyPhone: settings.companyPhone,
+        companyEmail: settings.companyEmail,
+        companyWebsite: settings.companyWebsite,
+        logoUrl: settings.logoUrl,
+        bankName: settings.bankName,
+        bankHolder: settings.bankHolder,
+        bankCLABE: settings.bankCLABE,
+        bankAccount: settings.bankAccount,
+        bankReference: settings.bankReference,
+        paymentConditions: settings.paymentConditions,
+        signatureLabelLeft: settings.signatureLabelLeft,
+        signatureLabelRight: settings.signatureLabelRight,
+        footerNote: settings.footerNote
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
