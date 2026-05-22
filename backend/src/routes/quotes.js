@@ -95,6 +95,31 @@ router.put('/:id', auth, async (req, res) => {
   try {
     const quote = await Quote.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
     if (!quote) return res.status(404).json({ error: 'Cotización no encontrada' });
+
+    // ENVIAR WEBHOOK A N8N CUANDO LA COTIZACIÓN SE MARQUE COMO 'sent'
+    if (req.body.status === 'sent' || quote.status === 'sent') {
+       try {
+          let customerData = {};
+          if (quote.client_id) {
+            customerData = await Customer.findById(quote.client_id) || {};
+          } else if (quote.customer) {
+            customerData = await Customer.findOne({ name: quote.customer }) || {};
+          }
+          
+          fetch('https://n8n.diabolicalservices.tech/webhook-test/9b0c65c5-32f4-4f80-aa01-0730f9812e88', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  event: 'quote_sent',
+                  quote: quote,
+                  customer: customerData
+              })
+          }).catch(err => console.error('Error enviando webhook de cotización a n8n:', err));
+       } catch (webhookErr) {
+          console.error('Error procesando datos para webhook n8n:', webhookErr);
+       }
+    }
+
     res.json(quote);
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -3,6 +3,25 @@ const Customer = require('../models/Customer');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
+// ─── WEBHOOK PARA N8N (Sin Auth) ────────────────────────────────────────────────
+router.post('/webhook/n8n', async (req, res) => {
+  const { company, name, phone, email, status } = req.body;
+  if (!company && !name) return res.status(400).json({ error: 'Nombre o Empresa requerido' });
+  
+  try {
+    const customer = await Customer.create({
+      name: company || name,
+      contact: name,
+      phone,
+      email,
+      status: status || 'potencial'
+    });
+    res.status(201).json(customer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET all customers
 router.get('/', auth, async (req, res) => {
   try {
