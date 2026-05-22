@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     X, Printer, Building2, Edit3, CheckCircle,
-    User, FileText, Tag, Landmark, RotateCcw, ChevronDown, ChevronUp, Save, AlertCircle
+    User, FileText, Tag, Landmark, RotateCcw, ChevronDown, ChevronUp, Save, AlertCircle, Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
@@ -56,7 +56,7 @@ const DocDetailRow = ({ label, children }) => (
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 const QuotePreview = ({ quote, isOpen, onClose }) => {
-    const { quoteSettings, setQuoteSettings } = useApp();
+    const { quoteSettings, setQuoteSettings, updateQuote } = useApp();
     const [editMode, setEditMode] = useState(false);
     const [ed, setEd] = useState({});
     const [isSaving, setIsSaving] = useState(false);
@@ -179,6 +179,23 @@ const QuotePreview = ({ quote, isOpen, onClose }) => {
                         )}
                     </div>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    await updateQuote(quote._id || quote.id, { status: 'sent' });
+                                    setSaveToast({ type: 'success', text: '¡Cotización enviada!' });
+                                    setTimeout(() => setSaveToast(null), 3000);
+                                } catch (error) {
+                                    setSaveToast({ type: 'error', text: 'Error al enviar.' });
+                                    setTimeout(() => setSaveToast(null), 3000);
+                                }
+                            }}
+                            style={{ height: '38px', padding: '0 20px', borderRadius: '9px', cursor: 'pointer', border: '1px solid #111827', background: 'transparent', color: '#111827', fontWeight: 800, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', transition: 'transform 0.1s' }}
+                            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.96)'}
+                            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                        >
+                            <Send size={16} /> Enviar Cotización
+                        </button>
                         <button
                             onClick={() => {
                                 const folio = quote.folio || quote._id || 'cotizacion';

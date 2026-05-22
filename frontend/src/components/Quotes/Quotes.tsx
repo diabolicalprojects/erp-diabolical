@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, FileText, Trash2, ExternalLink, Sparkles } from 'lucide-react';
+import { Plus, Search, FileText, Trash2, ExternalLink, Sparkles, Send } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import QuoteWizard from './QuoteWizard';
 import CustomQuoteBuilder from './CustomQuoteBuilder';
@@ -18,7 +18,7 @@ const STATUS_LABELS = {
 };
 
 const Quotes = () => {
-    const { quotes, deleteQuote } = useApp();
+    const { quotes, deleteQuote, updateQuote } = useApp();
     const [isWizardOpen, setIsWizardOpen] = useState(false);
     const [isCustomOpen, setIsCustomOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -29,6 +29,16 @@ const Quotes = () => {
     const handlePreview = (quote) => {
         setSelectedQuote(quote);
         setIsPreviewOpen(true);
+    };
+
+    const handleSendQuote = async (quote) => {
+        try {
+            await updateQuote(quote._id || quote.id, { status: 'sent' });
+            alert('¡Cotización enviada con éxito!');
+        } catch (error) {
+            console.error('Error enviando cotización:', error);
+            alert('Hubo un error al enviar la cotización.');
+        }
     };
 
     const tutorialSteps = [
@@ -158,6 +168,14 @@ const Quotes = () => {
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                                <button
+                                                    className="btn-secondary"
+                                                    style={{ padding: '0.4rem', color: '#10b981', borderColor: 'transparent' }}
+                                                    onClick={() => handleSendQuote(q)}
+                                                    title="Enviar Cotización"
+                                                >
+                                                    <Send size={16} />
+                                                </button>
                                                 <button
                                                     className="btn-secondary"
                                                     style={{ padding: '0.4rem' }}

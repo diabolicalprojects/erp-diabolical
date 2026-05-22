@@ -3,7 +3,7 @@ import {
     X, Save, Plus, Trash2, ChevronDown, ChevronUp,
     Edit3, FileText, DollarSign, Hash, Tag, Percent,
     GripVertical, Copy, CheckCircle, Sparkles, AlertCircle,
-    Users, Package, Wrench, Star
+    Users, Package, Wrench, Star, Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
@@ -345,7 +345,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
     const hasErrors = items.some(i => !i.name.trim() || i.unitPrice === 0);
 
     // ── Guardar (persiste en MongoDB via API) ──
-    const handleSave = async () => {
+    const handleSave = async (status = 'draft') => {
         if (isSaving) return;
         setIsSaving(true);
         try {
@@ -368,7 +368,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                 customer: customerName,
                 date: new Date().toISOString(),
                 amount: total,
-                status: 'sent',
+                status: status,
                 type: 'custom',
                 notes,
                 items: items.map(({ name, description, quantity, unitPrice, discount, type }) => ({
@@ -650,7 +650,22 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                             {/* Actions */}
                                             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                 <button
-                                                    onClick={handleSave}
+                                                    onClick={() => handleSave('draft')}
+                                                    disabled={items.length === 0 || hasErrors || saved || isSaving}
+                                                    style={{
+                                                        width: '100%', padding: '12px', borderRadius: '12px', cursor: 'pointer',
+                                                        background: saved ? 'rgba(16,185,129,0.15)' : isSaving ? 'rgba(255,255,255,0.1)' : 'var(--glass)',
+                                                        color: saved ? '#34d399' : isSaving ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                                        border: saved ? '1px solid #34d399' : '1px solid var(--text-primary)',
+                                                        fontWeight: 800, fontSize: '0.88rem', opacity: (items.length === 0 || hasErrors) && !saved ? 0.4 : 1,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                                        transition: 'all 0.3s'
+                                                    }}
+                                                >
+                                                    {saved ? <><CheckCircle size={16} /> ¡Cotización guardada!</> : isSaving ? 'Guardando...' : <><Save size={15} /> Guardar Borrador</>}
+                                                </button>
+                                                <button
+                                                    onClick={() => handleSave('sent')}
                                                     disabled={items.length === 0 || hasErrors || saved || isSaving}
                                                     style={{
                                                         width: '100%', padding: '12px', borderRadius: '12px', cursor: 'pointer',
@@ -662,7 +677,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                                         transition: 'all 0.3s'
                                                     }}
                                                 >
-                                                    {saved ? <><CheckCircle size={16} /> ¡Cotización guardada!</> : isSaving ? 'Guardando...' : <><Save size={15} /> Guardar Cotización</>}
+                                                    {saved ? <><CheckCircle size={16} /> ¡Cotización enviada!</> : isSaving ? 'Guardando...' : <><Send size={15} /> Enviar Cotización</>}
                                                 </button>
                                                 <button
                                                     onClick={() => setStep(1)}

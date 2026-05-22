@@ -20,6 +20,7 @@ import Finances from './components/Finances/Finances';
 import Roles from './components/Roles/Roles';
 import Settings from './components/Settings/Settings';
 import Login from './pages/Login';
+import PublicQuoteViewer from './pages/PublicQuoteViewer';
 
 const Dashboard = () => {
   const { deals, projects, tracking, toggleTracking, receivables } = useApp();
@@ -244,6 +245,7 @@ const AppContent = () => {
         ) : (
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+            <Route path="/propuesta/:id" element={<PublicQuoteViewer />} />
             <Route path="/*" element={
               <ProtectedRoute>
                 <div className="layout" key="app">

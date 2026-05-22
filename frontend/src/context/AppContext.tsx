@@ -180,6 +180,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     setQuotes(quotes.filter(q => q._id !== id));
   };
 
+  const updateQuote = async (id: string, data: any) => {
+    const res = await quotesAPI.update(id, data);
+    setQuotes(quotes.map(q => q._id === id ? res.data : q));
+    return res.data;
+  };
+
   // Purchase actions
   const receiveOrder = async (id: string) => {
     const res = await purchasesAPI.update(id, { status: 'recibido' });
@@ -221,7 +227,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       customers, addCustomer, updateCustomer, deleteCustomer,
       projects, setProjects,
       tracking, toggleTracking,
-      quotes, setQuotes, addQuote, deleteQuote,
+      quotes, setQuotes, addQuote, updateQuote, deleteQuote,
       deals, setDeals, addDeal, deleteDeal, moveDeal,
       purchases, setPurchases, vendors, setVendors, receiveOrder,
       receivables, setReceivables, registerPayment,
