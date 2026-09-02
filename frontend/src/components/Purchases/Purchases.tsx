@@ -1,155 +1,248 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Truck, Search, Plus, Trash2, PackageCheck, X } from 'lucide-react';
+import { ShoppingBag, Truck, Plus, Trash2, PackageCheck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { motion, AnimatePresence } from 'framer-motion';
 import ModuleTutorial from '../Common/ModuleTutorial';
 import { purchasesAPI, vendorsAPI } from '../../services/api';
+import { Modal, Field, Badge, Button, PageHeader, DataTable, Tabs, ConfirmDialog } from '../ui';
+import { currency, date as formatDate } from '../../lib/format';
+import { statusLabel } from '../../lib/constants';
+
+const TUTORIAL_STEPS = [
+  'Registra a tus proveedores antes de generar una orden de compra.',
+  'Las órdenes nacen en estado Pendiente y reciben folio automático.',
+  "Marca 'Recibir' cuando llegue la mercancía para cerrar la orden.",
+  // La versión anterior afirmaba que el inventario se actualizaba solo al
+  // recibir. No ocurre: `receiveOrder` únicamente cambia el estatus de la orden.
+  'Recibir una orden no modifica las existencias: ajústalas en Inventario.'
+];
 
 const Purchases = () => {
   const { purchases, vendors, receiveOrder, setPurchases, setVendors } = useApp();
-  const [activeTab, setActiveTab] = useState('orders');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newOrder, setNewOrder] = useState({ vendor: '', total: '' });
-  const [newVendor, setNewVendor] = useState({ name: '', contact: '', email: '' });
 
-  const tutorialSteps = [
-    "Gestiona tus proveedores en la pestaña dedicada.",
-    "Crea órdenes de compra para reabastecer inventario.",
-    "Usa el botón 'Recibir' para formalizar la entrada de mercancía.",
-    "El inventario se actualizará automáticamente al recibir."
-  ];
+  const [tab, setTab] = useState('orders');
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [order, setOrder] = useState({ vendor: '', total: '' });
+  const [vendor, setVendor] = useState({ name: '', contact: '', email: '', phone: '' });
+  const [pendingDelete, setPendingDelete] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAddOrder = async () => {
+  const isOrders = tab === 'orders';
+
+  const closeModal = () => { setModalOpen(false); setError(null); };
+
+  const handleCreateOrder = async () => {
+    if (!order.vendor) {
+      setError('Selecciona un proveedor');
+      return;
+    }
     try {
-      const res = await purchasesAPI.create({ vendor: newOrder.vendor, total: parseFloat(newOrder.total) || 0 });
-      setPurchases([res.data, ...purchases]);
-      setIsModalOpen(false);
-      setNewOrder({ vendor: '', total: '' });
-    } catch (err) { console.error(err); }
+      const { data } = await purchasesAPI.create({
+        vendor: order.vendor,
+        total: Number(order.total) || 0
+      });
+      // Forma funcional: leer `purchases` del closure perdía altas consecutivas.
+      setPurchases((prev: any[]) => [data, ...prev]);
+      setOrder({ vendor: '', total: '' });
+      closeModal();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo crear la orden');
+    }
   };
 
-  const handleAddVendor = async () => {
+  const handleCreateVendor = async () => {
+    if (!vendor.name.trim()) {
+      setError('El nombre del proveedor es obligatorio');
+      return;
+    }
     try {
-      const res = await vendorsAPI.create(newVendor);
-      setVendors([res.data, ...vendors]);
-      setIsModalOpen(false);
-      setNewVendor({ name: '', contact: '', email: '' });
-    } catch (err) { console.error(err); }
+      const { data } = await vendorsAPI.create(vendor);
+      setVendors((prev: any[]) => [data, ...prev]);
+      setVendor({ name: '', contact: '', email: '', phone: '' });
+      closeModal();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo guardar el proveedor');
+    }
   };
 
-  const handleDeleteVendor = async (id: string) => {
+  const handleDeleteVendor = async () => {
     try {
-      await vendorsAPI.delete(id);
-      setVendors(vendors.filter((v: any) => v._id !== id));
-    } catch (err) { console.error(err); }
+      await vendorsAPI.delete(pendingDelete._id);
+      setVendors((prev: any[]) => prev.filter((v) => v._id !== pendingDelete._id));
+      setPendingDelete(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo eliminar el proveedor');
+      setPendingDelete(null);
+    }
   };
 
   return (
     <div className="animate-fade">
-      <header className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div>
-            <h1>Compras y Suministros</h1>
-            <p className="subtitle">Gestión de proveedores y órdenes de compra</p>
-          </div>
-          <ModuleTutorial title="Compras" description="Controla el abastecimiento y la relación con tus proveedores." steps={tutorialSteps} />
-        </div>
-        <div className="header-actions">
-          <button className="btn-secondary" onClick={() => setActiveTab(activeTab === 'orders' ? 'vendors' : 'orders')}>
-            {activeTab === 'orders' ? <Truck size={18} /> : <ShoppingBag size={18} />}
-            {activeTab === 'orders' ? 'Ver Proveedores' : 'Ver Órdenes'}
-          </button>
-          <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-            <Plus size={18} /> {activeTab === 'orders' ? 'Nueva Orden' : 'Nuevo Proveedor'}
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="Compras y Suministros"
+        subtitle="Gestión de proveedores y órdenes de compra"
+        aside={
+          <ModuleTutorial
+            title="Compras"
+            description="Controla el abastecimiento y la relación con tus proveedores."
+            steps={TUTORIAL_STEPS}
+          />
+        }
+        actions={
+          <Button icon={<Plus size={18} />} onClick={() => setModalOpen(true)}>
+            {isOrders ? 'Nueva orden' : 'Nuevo proveedor'}
+          </Button>
+        }
+      />
 
-      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-        {activeTab === 'orders' ? (
-          <table className="data-table">
-            <thead><tr><th>Folio</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estatus</th><th style={{ textAlign: 'right' }}>Acciones</th></tr></thead>
-            <tbody>
-              {(purchases || []).map((p: any) => (
-                <tr key={p._id}>
-                  <td style={{ fontWeight: 600, color: 'var(--purple-light)' }}>{p.folio}</td>
-                  <td>{p.vendor}</td>
-                  <td style={{ opacity: 0.7 }}>{new Date(p.date).toLocaleDateString()}</td>
-                  <td>${(p.total || 0).toLocaleString()}</td>
-                  <td><span className={`status-badge ${p.status === 'recibido' ? 'success' : 'warning'}`}>{p.status}</span></td>
-                  <td style={{ textAlign: 'right' }}>
-                    {p.status !== 'recibido' && (
-                      <button className="btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', gap: '4px' }} onClick={() => receiveOrder(p._id)}>
-                        <PackageCheck size={14} /> Recibir
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <table className="data-table">
-            <thead><tr><th>Nombre</th><th>Contacto</th><th>Email</th><th style={{ textAlign: 'right' }}>Acciones</th></tr></thead>
-            <tbody>
-              {(vendors || []).map((v: any) => (
-                <tr key={v._id}>
-                  <td style={{ fontWeight: 600 }}>{v.name}</td>
-                  <td>{v.contact}</td>
-                  <td style={{ opacity: 0.7 }}>{v.email}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn-secondary" style={{ padding: '0.4rem', color: 'var(--error)', borderColor: 'transparent' }} onClick={() => handleDeleteVendor(v._id)}>
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {error && <div className="alert alert--danger">{error}</div>}
 
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="modal-overlay modal-center" onClick={() => setIsModalOpen(false)}>
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="modal-content-centered" onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                <h2>{activeTab === 'orders' ? 'Generar Orden de Compra' : 'Registrar Proveedor'}</h2>
-                <button className="icon-btn" onClick={() => setIsModalOpen(false)}><X size={20} /></button>
-              </div>
-              {activeTab === 'orders' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Seleccionar Proveedor</label>
-                    <select style={{ width: '100%' }} value={newOrder.vendor} onChange={e => setNewOrder({ ...newOrder, vendor: e.target.value })}>
-                      <option value="">Selecciona un proveedor...</option>
-                      {(vendors || []).map((v: any) => <option key={v._id} value={v.name}>{v.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Total Estimado ($)</label>
-                    <input style={{ width: '100%' }} type="number" value={newOrder.total} onChange={e => setNewOrder({ ...newOrder, total: e.target.value })} placeholder="0.00" />
-                  </div>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                    <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                    <button className="btn-primary" style={{ flex: 1 }} onClick={handleAddOrder}>Crear Orden</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div><label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Nombre Empresa</label><input style={{ width: '100%' }} type="text" value={newVendor.name} onChange={e => setNewVendor({ ...newVendor, name: e.target.value })} /></div>
-                  <div><label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Persona de Contacto</label><input style={{ width: '100%' }} type="text" value={newVendor.contact} onChange={e => setNewVendor({ ...newVendor, contact: e.target.value })} /></div>
-                  <div><label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Email</label><input style={{ width: '100%' }} type="email" value={newVendor.email} onChange={e => setNewVendor({ ...newVendor, email: e.target.value })} /></div>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                    <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                    <button className="btn-primary" style={{ flex: 1 }} onClick={handleAddVendor}>Guardar Proveedor</button>
-                  </div>
-                </div>
+      {/* Antes era un único botón que alternaba entre vistas: no dejaba ver
+          cuántas había de cada una ni cuál estaba activa de un vistazo. */}
+      <Tabs
+        ariaLabel="Vista de compras"
+        active={tab}
+        onChange={setTab}
+        items={[
+          { id: 'orders', label: 'Órdenes', icon: <ShoppingBag size={16} />, hint: (purchases || []).length },
+          { id: 'vendors', label: 'Proveedores', icon: <Truck size={16} />, hint: (vendors || []).length }
+        ]}
+      />
+
+      {isOrders ? (
+        <DataTable
+          count={(purchases || []).length}
+          emptyIcon={<ShoppingBag size={32} />}
+          emptyTitle="Sin órdenes de compra"
+          emptyDescription="Genera una orden para registrar el abastecimiento con un proveedor."
+          emptyAction={<Button icon={<Plus size={18} />} onClick={() => setModalOpen(true)}>Nueva orden</Button>}
+          head={
+            <tr>
+              <th>Folio</th>
+              <th>Proveedor</th>
+              <th>Fecha</th>
+              <th className="num">Total</th>
+              <th>Estatus</th>
+              <th className="actions">Acciones</th>
+            </tr>
+          }
+        >
+          {(purchases || []).map((p: any) => (
+            <tr key={p._id}>
+              <td className="cell-mono cell-strong">{p.folio}</td>
+              <td>{p.vendor}</td>
+              <td className="cell-muted">{formatDate(p.date)}</td>
+              <td className="num cell-strong">{currency(p.total)}</td>
+              <td><Badge status={p.status}>{statusLabel(p.status)}</Badge></td>
+              <td className="actions">
+                {p.status !== 'recibido' && p.status !== 'cancelado' && (
+                  <Button variant="secondary" icon={<PackageCheck size={16} />} onClick={() => receiveOrder(p._id)}>
+                    Recibir
+                  </Button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      ) : (
+        <DataTable
+          count={(vendors || []).length}
+          emptyIcon={<Truck size={32} />}
+          emptyTitle="Sin proveedores"
+          emptyDescription="Registra un proveedor para poder generarle órdenes de compra."
+          emptyAction={<Button icon={<Plus size={18} />} onClick={() => setModalOpen(true)}>Nuevo proveedor</Button>}
+          head={
+            <tr>
+              <th>Proveedor</th>
+              <th>Contacto</th>
+              <th>Correo</th>
+              <th>Teléfono</th>
+              <th className="actions">Acciones</th>
+            </tr>
+          }
+        >
+          {(vendors || []).map((v: any) => (
+            <tr key={v._id}>
+              <td className="cell-strong">{v.name}</td>
+              <td>{v.contact || '—'}</td>
+              <td className="cell-muted">{v.email || '—'}</td>
+              <td className="cell-muted">{v.phone || '—'}</td>
+              <td className="actions">
+                <button
+                  className="icon-action icon-action--danger"
+                  onClick={() => setPendingDelete(v)}
+                  aria-label={`Eliminar ${v.name}`}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      )}
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        title={isOrders ? 'Generar orden de compra' : 'Registrar proveedor'}
+        width="520px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModal}>Cancelar</Button>
+            <Button onClick={isOrders ? handleCreateOrder : handleCreateVendor}>
+              {isOrders ? 'Crear orden' : 'Guardar proveedor'}
+            </Button>
+          </>
+        }
+      >
+        {error && <div className="alert alert--danger">{error}</div>}
+
+        {isOrders ? (
+          <div className="stack">
+            <label className="field">
+              <span className="field-label">Proveedor</span>
+              <select
+                className="field-input"
+                value={order.vendor}
+                onChange={(e) => setOrder({ ...order, vendor: e.target.value })}
+              >
+                <option value="">Selecciona un proveedor…</option>
+                {(vendors || []).map((v: any) => (
+                  <option key={v._id} value={v.name}>{v.name}</option>
+                ))}
+              </select>
+              {(vendors || []).length === 0 && (
+                <span className="field-hint">
+                  No hay proveedores registrados. Créalo primero en la pestaña Proveedores.
+                </span>
               )}
-            </motion.div>
+            </label>
+            <Field
+              label="Total estimado"
+              type="number"
+              value={order.total}
+              onChange={(v) => setOrder({ ...order, total: v })}
+              placeholder="0.00"
+            />
+          </div>
+        ) : (
+          <div className="stack">
+            <Field label="Nombre de la empresa" value={vendor.name} onChange={(v) => setVendor({ ...vendor, name: v })} />
+            <Field label="Persona de contacto" value={vendor.contact} onChange={(v) => setVendor({ ...vendor, contact: v })} />
+            <Field label="Correo" type="email" value={vendor.email} onChange={(v) => setVendor({ ...vendor, email: v })} />
+            <Field label="Teléfono" value={vendor.phone} onChange={(v) => setVendor({ ...vendor, phone: v })} />
           </div>
         )}
-      </AnimatePresence>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        title="Eliminar proveedor"
+        message={<>Se eliminará <strong>{pendingDelete?.name}</strong>. Las órdenes ya emitidas conservarán su nombre.</>}
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={handleDeleteVendor}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

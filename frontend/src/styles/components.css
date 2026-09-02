@@ -993,3 +993,256 @@ input:-webkit-autofill:focus {
         grid-template-columns: 1fr;
     }
 }
+
+/* ── Pestañas ──────────────────────────────────────────────────────────────
+   Antes eran botones .btn-secondary con un objeto de estilo inline distinto
+   según estuvieran activos. */
+.tabs {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-5);
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0.55rem 1rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: var(--text-base);
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tab.is-active {
+    background: var(--accent);
+    color: var(--accent-contrast);
+}
+
+.tab-hint {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+    font-size: var(--text-sm);
+}
+
+/* ── Tablas ────────────────────────────────────────────────────────────────
+   El contenedor aporta el desplazamiento horizontal: una tabla ancha debe
+   desplazarse dentro de su caja, nunca empujar el ancho de la página. */
+.data-table-container {
+    overflow-x: auto;
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.data-table td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--line-soft, var(--border-color));
+    vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.data-table tbody tr:hover {
+    background: var(--glass);
+}
+
+/* Las cifras se alinean a la derecha con anchos de dígito fijos, para poder
+   compararlas de un vistazo columna abajo. */
+.data-table .num,
+.data-table th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.data-table .actions,
+.data-table th.actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.cell-strong {
+    font-weight: 600;
+}
+
+.cell-mono {
+    font-family: 'CODE Light', ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.02em;
+}
+
+/* ── Botón de icono en tablas ────────────────────────────────────────────── */
+.icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.icon-action:hover {
+    background: var(--glass);
+    color: var(--text-primary);
+}
+
+.icon-action--danger:hover {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* ── Resumen de cifras en el encabezado ──────────────────────────────────── */
+.summary-strip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+}
+
+.summary-item span {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.summary-item strong {
+    font-family: 'Nexa Bold', sans-serif;
+    font-size: 1.15rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.summary-item--in strong {
+    color: var(--success);
+}
+
+.summary-item--out strong {
+    color: var(--danger);
+}
+
+.summary-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--glass-border);
+}
+
+/* ── Tarjetas de modo (elección de tipo de cotización) ─────────────────────
+   El hover se hacía con onMouseEnter/onMouseLeave escribiendo en style desde
+   JavaScript; es trabajo que el CSS hace solo. */
+.mode-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+}
+
+.mode-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.mode-card:hover {
+    border-color: var(--text-primary);
+    transform: translateY(-2px);
+}
+
+.mode-card--accent:hover {
+    border-color: var(--warning);
+}
+
+.mode-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: var(--glass);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mode-card--accent .mode-icon {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.mode-card strong {
+    display: block;
+    font-family: 'Nexa Bold', sans-serif;
+    font-size: 0.95rem;
+}
+
+.mode-card small {
+    display: block;
+    margin-top: 3px;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+}
+
+/* ── Grupo de acciones en una fila de tabla ──────────────────────────────── */
+.action-row {
+    display: inline-flex;
+    justify-content: flex-end;
+    gap: var(--space-1);
+}
+
+.alert--success {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-bg);
+}
