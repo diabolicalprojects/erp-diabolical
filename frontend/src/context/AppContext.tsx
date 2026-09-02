@@ -4,10 +4,14 @@ import {
   purchasesAPI, vendorsAPI, receivablesAPI, payablesAPI,
   projectsAPI, tasksAPI, settingsAPI, authAPI
 } from '../services/api';
+import { CUSTOMER_STATUSES, PROJECT_STATUSES } from '../lib/constants';
 
 const AppContext = createContext<any>(null);
 
 const EMPTY_PIPELINE = { nuevo: [], contacto: [], propuesta: [], negociacion: [], cierre: [] };
+
+/** Referencia estable: un array nuevo en cada render rompería el useMemo del value. */
+const EMPTY_PRESETS: any[] = [];
 
 const STORAGE = { token: 'erp_token', user: 'erp_user', theme: 'erp_theme' };
 
@@ -270,6 +274,14 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     quoteSettings, setQuoteSettings,
     services,
+
+    // Constantes de dominio. Se siguen exponiendo por el contexto porque varios
+    // módulos las consumen desde aquí; la fuente real es lib/constants.ts.
+    customerStatuses: CUSTOMER_STATUSES,
+    projectStatuses: PROJECT_STATUSES,
+    // QuoteWizard itera esta lista en su pestaña "presets". Nunca se ha llegado
+    // a llenar, pero quitarla del contexto hacía que `.map` reventara.
+    quotePresets: EMPTY_PRESETS,
 
     refreshData: loadAllData
   }), [
