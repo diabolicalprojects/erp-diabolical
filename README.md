@@ -84,7 +84,9 @@ npm run dev                                         # http://localhost:5173
 | `NODE_ENV` | No | En `production` no se exponen trazas de error. |
 | `FRONTEND_URL` | No | Único origen externo aceptado por CORS. |
 | `JWT_EXPIRES_IN` | No | Vigencia del token (por defecto `7d`). |
-| `N8N_WEBHOOK_URL` | No | Destino de los webhooks salientes. Vacío = desactivados. |
+| `N8N_WEBHOOK_URL` | No | Destino por defecto de los webhooks salientes. |
+| `N8N_WEBHOOK_URL_<EVENTO>` | No | Destino por evento; tiene prioridad. Ver más abajo. |
+| `N8N_OUTBOUND_SECRET` | No | Si se define, el ERP envía la cabecera `x-erp-secret`. |
 | `N8N_INBOUND_SECRET` | **Sí, si se usa n8n** | Secreto compartido del webhook de entrada. |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` / `SEED_ADMIN_NAME` | No | Credenciales iniciales del `npm run seed`. |
 
@@ -98,18 +100,33 @@ npm run dev                                         # http://localhost:5173
 
 ## Integración con n8n
 
-**Salida** — el backend notifica eventos a `N8N_WEBHOOK_URL` a través de
+**Salida** — el backend notifica eventos a n8n mediante
 `services/webhookDispatcher.js`. Payload:
 
 ```json
 { "event": "deal.closed", "timestamp": "ISO-8601", "data": { } }
 ```
 
-Eventos emitidos: `deal.closed`, `quote.sent`.
+El destino se resuelve **por evento**, porque cada uno suele tener su propio
+workflow en n8n:
+
+| Evento | Variable específica | Alternativa |
+|---|---|---|
+| `deal.closed` | `N8N_WEBHOOK_URL_DEAL_CLOSED` | `N8N_WEBHOOK_URL` |
+| `quote.sent` | `N8N_WEBHOOK_URL_QUOTE_SENT` | `N8N_WEBHOOK_URL` |
+
+Si no hay ninguna definida, el evento se omite con un aviso en el log. Para
+añadir un evento nuevo la convención es directa: `mi.evento` busca
+`N8N_WEBHOOK_URL_MI_EVENTO`.
+
+Definir `N8N_OUTBOUND_SECRET` hace que el ERP añada la cabecera
+`x-erp-secret`, para que el nodo Webhook de n8n pueda verificar el origen con
+Header Auth.
 
 **Entrada** — `POST /api/customers/webhook/n8n` da de alta un cliente. Requiere
 la cabecera `x-webhook-secret` con el valor de `N8N_INBOUND_SECRET`; sin ella
-responde `401`. Configura esa cabecera en el nodo HTTP Request de n8n.
+responde `401`. Se configura en el nodo *HTTP Request* de n8n que llama al ERP
+—no en el nodo Webhook, que es el extremo contrario.
 
 ---
 
