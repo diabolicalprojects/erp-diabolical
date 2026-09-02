@@ -2,115 +2,99 @@ const express = require('express');
 const Deal = require('../models/Deal');
 const Quote = require('../models/Quote');
 const auth = require('../middleware/auth');
+const asyncHandler = require('../utils/asyncHandler');
+const { NotFoundError, BadRequestError } = require('../utils/errors');
+const { DEAL_STAGES } = require('../config/constants');
 const dealEmitter = require('../events/dealEvents');
+
 const router = express.Router();
 
-// ─── GET all deals (grouped by stage) ────────────────────────────────────────
-router.get('/', auth, async (req, res) => {
-  try {
-    const deals = await Deal.find().populate('client_id', 'name email status').sort({ createdAt: -1 });
-    const grouped = {
-      nuevo: deals.filter(d => d.stage === 'nuevo'),
-      contacto: deals.filter(d => d.stage === 'contacto'),
-      propuesta: deals.filter(d => d.stage === 'propuesta'),
-      negociacion: deals.filter(d => d.stage === 'negociacion'),
-      cierre: deals.filter(d => d.stage === 'cierre')
-    };
-    res.json(grouped);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+// ─── GET todos los tratos, agrupados por etapa ────────────────────────────────
+router.get('/', auth, asyncHandler(async (req, res) => {
+  const deals = await Deal.find()
+    .populate('client_id', 'name email status')
+    .sort({ createdAt: -1 });
+
+  // Se agrupa en una pasada en vez de filtrar el array una vez por etapa.
+  const grouped = Object.fromEntries(DEAL_STAGES.map((s) => [s, []]));
+  for (const deal of deals) {
+    (grouped[deal.stage] ||= []).push(deal);
   }
-});
 
-// ─── GET single deal ──────────────────────────────────────────────────────────
-router.get('/:id', auth, async (req, res) => {
-  try {
-    const deal = await Deal.findById(req.params.id).populate('client_id', 'name email status');
-    if (!deal) return res.status(404).json({ error: 'Trato no encontrado' });
-    res.json(deal);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  res.json(grouped);
+}));
+
+// ─── GET un trato ─────────────────────────────────────────────────────────────
+router.get('/:id', auth, asyncHandler(async (req, res) => {
+  const deal = await Deal.findById(req.params.id).populate('client_id', 'name email status');
+  if (!deal) throw new NotFoundError('Trato no encontrado');
+  res.json(deal);
+}));
+
+// ─── POST crear trato ─────────────────────────────────────────────────────────
+router.post('/', auth, asyncHandler(async (req, res) => {
+  res.status(201).json(await Deal.create(req.body));
+}));
+
+// ─── PATCH cambio de etapa — PRD §4A y §4B ────────────────────────────────────
+// Es el disparador principal del workflow:
+//   - Valida que exista una cotización en borrador antes de pasar a 'propuesta'
+//   - Emite 'deal:closed' de forma asíncrona al llegar a 'cierre'
+router.patch('/:id/stage', auth, asyncHandler(async (req, res) => {
+  const { stage } = req.body;
+
+  if (!stage || !DEAL_STAGES.includes(stage)) {
+    throw new BadRequestError(`Etapa inválida. Debe ser una de: ${DEAL_STAGES.join(', ')}`);
   }
-});
 
-// ─── POST create deal ─────────────────────────────────────────────────────────
-router.post('/', auth, async (req, res) => {
-  try {
-    const deal = await Deal.create(req.body);
-    res.status(201).json(deal);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+  const deal = await Deal.findById(req.params.id);
+  if (!deal) throw new NotFoundError('Trato no encontrado');
 
-// ─── PATCH stage change — PRD §4A & §4B ──────────────────────────────────────
-// This is the primary workflow trigger:
-//   - Validates that a draft Quote exists before allowing → 'propuesta'
-//   - Emits the async 'deal:closed' event when moving → 'cierre'
-router.patch('/:id/stage', auth, async (req, res) => {
-  try {
-    const { stage } = req.body;
-
-    const validStages = ['nuevo', 'contacto', 'propuesta', 'negociacion', 'cierre'];
-    if (!stage || !validStages.includes(stage)) {
-      return res.status(400).json({ error: `Stage inválido. Debe ser uno de: ${validStages.join(', ')}` });
+  // PRD §4A — 'propuesta' exige al menos una cotización en borrador
+  if (stage === 'propuesta') {
+    const draftQuote = await Quote.exists({ deal_id: deal._id, status: 'draft' });
+    if (!draftQuote) {
+      throw new BadRequestError(
+        'Se requiere al menos una cotización en estado Borrador vinculada a este trato para pasar a Propuesta.',
+        'MISSING_DRAFT_QUOTE'
+      );
     }
-
-    const deal = await Deal.findById(req.params.id);
-    if (!deal) return res.status(404).json({ error: 'Trato no encontrado' });
-
-    // PRD §4A — Validation: propuesta requires at least one draft quote
-    if (stage === 'propuesta') {
-      const draftQuote = await Quote.findOne({ deal_id: deal._id, status: 'draft' });
-      if (!draftQuote) {
-        return res.status(400).json({
-          error: 'Se requiere al menos una cotización en estado Borrador (draft) vinculada a este trato para pasar a Propuesta.',
-          code: 'MISSING_DRAFT_QUOTE'
-        });
-      }
-    }
-
-    // Update stage
-    deal.stage = stage;
-    if (stage === 'cierre') {
-      deal.wonDate = new Date();
-    }
-    await deal.save();
-
-    // PRD §4B — Emit deal:closed asynchronously AFTER responding
-    // setImmediate ensures the response is sent first, then the async chain fires
-    if (stage === 'cierre') {
-      setImmediate(() => {
-        dealEmitter.emit('deal:closed', { deal });
-      });
-    }
-
-    res.json(deal);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
   }
-});
 
-// ─── PUT update deal (general update / drag-and-drop fallback) ────────────────
-router.put('/:id', auth, async (req, res) => {
-  try {
-    const deal = await Deal.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!deal) return res.status(404).json({ error: 'Trato no encontrado' });
-    res.json(deal);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+  // Solo se emite el evento si el trato ENTRA a 'cierre' ahora. Sin esta
+  // comprobación, reenviar la misma etapa duplicaba la CxC y el webhook.
+  const isClosing = stage === 'cierre' && deal.stage !== 'cierre';
 
-// ─── DELETE deal ──────────────────────────────────────────────────────────────
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    const deal = await Deal.findByIdAndDelete(req.params.id);
-    if (!deal) return res.status(404).json({ error: 'Trato no encontrado' });
-    res.json({ message: 'Trato eliminado' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  deal.stage = stage;
+  if (isClosing) deal.wonDate = new Date();
+  await deal.save();
+
+  res.json(deal);
+
+  // PRD §4B — la cadena asíncrona arranca después de responder.
+  if (isClosing) {
+    setImmediate(() => dealEmitter.emit('deal:closed', { deal }));
   }
-});
+}));
+
+// ─── PUT actualizar trato ─────────────────────────────────────────────────────
+// No cambia `stage`: eso pasa por PATCH /:id/stage para no saltarse las
+// validaciones ni el evento de cierre.
+router.put('/:id', auth, asyncHandler(async (req, res) => {
+  const { stage, ...updates } = req.body;
+  const deal = await Deal.findById(req.params.id);
+  if (!deal) throw new NotFoundError('Trato no encontrado');
+
+  Object.assign(deal, updates);
+  await deal.save();
+  res.json(deal);
+}));
+
+// ─── DELETE trato ─────────────────────────────────────────────────────────────
+router.delete('/:id', auth, asyncHandler(async (req, res) => {
+  const deal = await Deal.findByIdAndDelete(req.params.id);
+  if (!deal) throw new NotFoundError('Trato no encontrado');
+  res.json({ message: 'Trato eliminado', id: req.params.id });
+}));
 
 module.exports = router;

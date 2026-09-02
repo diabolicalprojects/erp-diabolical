@@ -2,26 +2,26 @@ const dealEmitter = require('../events/dealEvents');
 const Customer = require('../models/Customer');
 const Quote = require('../models/Quote');
 const Receivable = require('../models/Receivable');
+const { nextFolio } = require('../utils/folio');
 const { dispatch } = require('../services/webhookDispatcher');
 
 /**
- * Listener for the 'deal:closed' event.
- * Executes the full deal-closure chain asynchronously so the HTTP response
- * is never blocked:
+ * Cadena de cierre de trato (PRD §4B).
  *
- *  1. Promote the linked Customer status → 'activo'
- *  2. Approve the linked Draft Quote → status: 'accepted'
- *  3. Insert a CxC (Accounts Receivable) record
- *  4. Fire the n8n 'deal.closed' webhook
+ * Se ejecuta fuera del ciclo de respuesta HTTP:
+ *   1. Promueve el Cliente a 'activo'
+ *   2. Aprueba la cotización en borrador vinculada
+ *   3. Inserta la CxC correspondiente
+ *   4. Dispara el webhook 'deal.closed' hacia n8n
  */
 dealEmitter.on('deal:closed', async ({ deal }) => {
   const dealId = deal._id;
   const label = `[deal:closed | deal=${dealId}]`;
 
-  console.log(`${label} Starting async closure chain…`);
+  console.log(`${label} Iniciando cadena de cierre…`);
 
   try {
-    // ── Step 1: Promote Customer to 'activo' ──────────────────────────────
+    // ── 1. Cliente -> 'activo' ────────────────────────────────────────────────
     let customerDoc = null;
     if (deal.client_id) {
       customerDoc = await Customer.findByIdAndUpdate(
@@ -29,61 +29,66 @@ dealEmitter.on('deal:closed', async ({ deal }) => {
         { status: 'activo' },
         { new: true }
       );
-      console.log(`${label} Customer ${deal.client_id} promoted to 'activo'`);
+      console.log(`${label} Cliente ${deal.client_id} promovido a 'activo'`);
     } else {
-      console.warn(`${label} No client_id on deal — skipping Customer status update`);
+      console.warn(`${label} El trato no tiene client_id — se omite el cambio de estatus`);
     }
 
-    // ── Step 2: Approve the linked Draft Quote ────────────────────────────
+    // ── 2. Cotización borrador -> 'accepted' ──────────────────────────────────
     const approvedQuote = await Quote.findOneAndUpdate(
       { deal_id: dealId, status: 'draft' },
       { status: 'accepted' },
-      { new: true, sort: { createdAt: -1 } } // Pick most recent draft if multiple
+      { new: true, sort: { createdAt: -1 } }
     );
 
-    if (approvedQuote) {
-      console.log(`${label} Quote ${approvedQuote._id} (${approvedQuote.folio}) approved`);
+    if (!approvedQuote) {
+      console.warn(`${label} No hay cotización en borrador vinculada — no se genera CxC`);
     } else {
-      console.warn(`${label} No draft Quote found linked to this deal`);
+      console.log(`${label} Cotización ${approvedQuote.folio} aprobada`);
+
+      // ── 3. Crear CxC ────────────────────────────────────────────────────────
+      // Guarda contra reintentos: si el evento se emitiera dos veces para el
+      // mismo trato, no se duplica la cuenta por cobrar.
+      const already = await Receivable.exists({ quote_id: approvedQuote._id });
+
+      if (already) {
+        console.warn(`${label} Ya existe una CxC para esta cotización — se omite`);
+      } else {
+        const folio = await nextFolio('receivable', { prefix: 'INV', start: 501 });
+
+        const receivable = await Receivable.create({
+          folio,
+          client: deal.company,
+          amount: approvedQuote.amount,
+          paid: 0,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          // Ahora sí se persisten: antes Mongoose los descartaba por no estar
+          // declarados en el esquema, y las CxC quedaban sin trazabilidad.
+          deal_id: dealId,
+          quote_id: approvedQuote._id
+        });
+        console.log(`${label} CxC ${receivable.folio} creada por $${approvedQuote.amount}`);
+      }
     }
 
-    // ── Step 3: Create CxC (Receivable) record ────────────────────────────
-    if (approvedQuote) {
-      const count = await Receivable.countDocuments();
-      const folio = `INV-${String(501 + count).padStart(4, '0')}`;
-
-      await Receivable.create({
-        folio,
-        client: deal.company,
-        amount: approvedQuote.amount,
-        paid: 0,
-        status: 'pendiente',
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
-        // Optional references (no schema changes needed — stored as strings)
-        deal_id: String(dealId),
-        quote_id: String(approvedQuote._id),
-      });
-      console.log(`${label} Receivable ${folio} created for $${approvedQuote.amount}`);
-    }
-
-    // ── Step 4: Fire n8n Webhook ───────────────────────────────────────────
+    // ── 4. Webhook a n8n ──────────────────────────────────────────────────────
     await dispatch('deal.closed', {
       deal_id: dealId,
       client: {
         id: deal.client_id || null,
         name: deal.company,
-        email: customerDoc?.email || '',
+        email: customerDoc?.email || ''
       },
       quote: approvedQuote
         ? { id: approvedQuote._id, folio: approvedQuote.folio, total: approvedQuote.amount }
-        : null,
+        : null
     });
 
-    console.log(`${label} ✅ Closure chain completed`);
+    console.log(`${label} ✅ Cadena completada`);
   } catch (err) {
-    // Log but never re-throw — async listeners must not crash the process
-    console.error(`${label} ❌ Error in closure chain:`, err.message);
+    // Nunca se relanza: un listener async que lanza tumbaría el proceso.
+    console.error(`${label} ❌ Error en la cadena de cierre:`, err.message);
   }
 });
 
-console.log('[DealClosedListener] Registered ✅');
+console.log('[dealClosedListener] Registrado ✅');
