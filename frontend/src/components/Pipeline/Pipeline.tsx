@@ -1,265 +1,285 @@
 import React, { useState } from 'react';
-import { Plus, MoreVertical, Filter, AlertTriangle, Trophy } from 'lucide-react';
+import { Plus, AlertTriangle, Trophy, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { motion, AnimatePresence } from 'framer-motion';
-import ModuleTutorial from '../Common/ModuleTutorial';
 import { dealsAPI } from '../../services/api';
+import ModuleTutorial from '../Common/ModuleTutorial';
+import { Modal, Field, Button, PageHeader, ConfirmDialog } from '../ui';
+import { compactCurrency, currency } from '../../lib/format';
+
+const STAGES = [
+  { id: 'nuevo', name: 'Nuevo trato' },
+  { id: 'contacto', name: 'Primer contacto' },
+  { id: 'propuesta', name: 'Propuesta' },
+  { id: 'negociacion', name: 'Negociación' },
+  { id: 'cierre', name: 'Cierre' }
+];
+
+const TUTORIAL_STEPS = [
+  'Arrastra las tarjetas entre columnas, o usa el selector de etapa de cada una.',
+  "Pasar a 'Propuesta' exige una cotización en Borrador vinculada al trato.",
+  "Al mover a 'Cierre' se dispara la cadena: cliente → cotización → CxC → n8n.",
+  'El cierre pide confirmación porque no se puede deshacer.'
+];
+
+const EMPTY_DEAL = { company: '', value: '', contact: '' };
 
 const Pipeline = () => {
-  const { deals, setDeals, addDeal, moveDeal } = useApp();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { deals, setDeals, addDeal, deleteDeal } = useApp();
+
+  const [isModalOpen, setModalOpen] = useState(false);
   const [targetStage, setTargetStage] = useState('nuevo');
+  const [draft, setDraft] = useState(EMPTY_DEAL);
   const [activeColumn, setActiveColumn] = useState<string | null>(null);
-  const [draggedItem, setDraggedItem] = useState<any>(null);
-  const [newDeal, setNewDeal] = useState({ company: '', value: '', contact: '' });
-
-  // PRD §4A / §4B — Stage validation state
+  const [dragged, setDragged] = useState<any>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
   const [stageError, setStageError] = useState<string | null>(null);
-  const [closureConfirm, setClosureConfirm] = useState<{ deal: any; fromStage: string } | null>(null);
-  const [isMoving, setIsMoving] = useState(false);
-
-  const tutorialSteps = [
-    "Arrastra y suelta las tarjetas entre columnas para actualizar el proceso.",
-    "Mover a 'Propuesta' requiere una cotización en Borrador vinculada al trato.",
-    "Al mover a 'Cierre', se activa la cadena de automatización: cliente → cotización → CxC → n8n.",
-    "Haz clic en 'Añadir' bajo cada columna para registrar prospectos.",
-  ];
-
-  const pipelineStages = [
-    { id: 'nuevo', name: 'Nuevo Trato' },
-    { id: 'contacto', name: 'Primer Contacto' },
-    { id: 'propuesta', name: 'Propuesta' },
-    { id: 'negociacion', name: 'Negociación' },
-    { id: 'cierre', name: 'Cierre / Post' }
-  ];
-
-  const onDragStart = (e: any, deal: any, sourceStage: string) => {
-    setDraggedItem({ deal, sourceStage });
-    setStageError(null);
-    e.dataTransfer.setData('dealId', deal._id);
-  };
-
-  const onDrop = async (e: any, targetStageId: string) => {
-    e.preventDefault();
-    setActiveColumn(null);
-    if (!draggedItem) return;
-
-    const { deal, sourceStage } = draggedItem;
-    if (sourceStage === targetStageId) { setDraggedItem(null); return; }
-
-    // PRD §4B — Confirm before closing
-    if (targetStageId === 'cierre') {
-      setClosureConfirm({ deal, fromStage: sourceStage });
-      setDraggedItem(null);
-      return;
-    }
-
-    await attemptStageChange(deal, sourceStage, targetStageId);
-    setDraggedItem(null);
-  };
+  const [closureConfirm, setClosureConfirm] = useState<any>(null);
+  const [pendingDelete, setPendingDelete] = useState<any>(null);
 
   /**
-   * Core stage-change logic using the PRD-defined PATCH /stage endpoint.
-   * Falls back to optimistic local update via moveDeal (PUT) if backend rejects.
+   * Cambio de etapa vía PATCH: dispara la validación de propuesta y la cadena
+   * de cierre del backend. Sólo se atenúa la tarjeta en movimiento — antes se
+   * atenuaban todas las del tablero.
    */
-  const attemptStageChange = async (deal: any, fromStage: string, toStage: string) => {
-    setIsMoving(true);
+  const changeStage = async (deal: any, fromStage: string, toStage: string) => {
+    setMovingId(deal._id);
     setStageError(null);
     try {
-      // Use the new PATCH endpoint — triggers validation + event chain on backend
-      const res = await dealsAPI.patchStage(deal._id, toStage);
-      // Update local state optimistically
+      const { data } = await dealsAPI.patchStage(deal._id, toStage);
       setDeals((prev: any) => ({
         ...prev,
         [fromStage]: (prev[fromStage] || []).filter((d: any) => d._id !== deal._id),
-        [toStage]: [res.data, ...(prev[toStage] || [])],
+        [toStage]: [data, ...(prev[toStage] || [])]
       }));
     } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Error al mover el trato';
-      setStageError(msg);
-      // Auto-clear error after 6 seconds
-      setTimeout(() => setStageError(null), 6000);
+      setStageError(err?.response?.data?.error || 'No se pudo mover el trato');
+      setTimeout(() => setStageError(null), 8000);
     } finally {
-      setIsMoving(false);
+      setMovingId(null);
     }
   };
 
-  const handleConfirmClosure = async () => {
-    if (!closureConfirm) return;
-    const { deal, fromStage } = closureConfirm;
-    setClosureConfirm(null);
-    await attemptStageChange(deal, fromStage, 'cierre');
+  /** Punto único de entrada: lo usan el arrastre y el selector de etapa. */
+  const requestStageChange = (deal: any, fromStage: string, toStage: string) => {
+    if (fromStage === toStage) return;
+    if (toStage === 'cierre') {
+      setClosureConfirm({ deal, fromStage });
+      return;
+    }
+    changeStage(deal, fromStage, toStage);
   };
 
-  const handleAddDeal = async () => {
+  const handleDrop = (e: React.DragEvent, toStage: string) => {
+    e.preventDefault();
+    setActiveColumn(null);
+    if (!dragged) return;
+    requestStageChange(dragged.deal, dragged.fromStage, toStage);
+    setDragged(null);
+  };
+
+  const handleCreate = async () => {
+    if (!draft.company.trim()) {
+      setStageError('El nombre de la empresa es obligatorio');
+      return;
+    }
     try {
       await addDeal(targetStage, {
-        company: newDeal.company,
-        value: parseFloat(newDeal.value) || 0,
-        contact: newDeal.contact,
-        days: 1
+        company: draft.company.trim(),
+        contact: draft.contact,
+        value: Number(draft.value) || 0,
+        days: 0
       });
-      setIsModalOpen(false);
-      setNewDeal({ company: '', value: '', contact: '' });
-    } catch (err) {
-      console.error('Error adding deal:', err);
+      setModalOpen(false);
+      setDraft(EMPTY_DEAL);
+    } catch (err: any) {
+      setStageError(err?.response?.data?.error || 'No se pudo crear el trato');
     }
   };
+
+  const openCreate = (stage: string) => {
+    setTargetStage(stage);
+    setDraft(EMPTY_DEAL);
+    setModalOpen(true);
+  };
+
+  const totalPipeline = STAGES
+    .filter((s) => s.id !== 'cierre')
+    .reduce((acc, s) => acc + (deals[s.id] || []).reduce((a: number, d: any) => a + (d.value || 0), 0), 0);
 
   return (
     <div className="animate-fade">
-      <header className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div>
-            <h1>CRM & Pipeline</h1>
-            <p className="subtitle">Gestión visual de oportunidades</p>
-          </div>
-          <ModuleTutorial title="Pipeline" description="Mueve tus tratos a través del embudo de ventas para cerrar más negocios." steps={tutorialSteps} />
-        </div>
-        <div className="header-actions">
-          <button className="btn-secondary"><Filter size={18} /> Filtros</button>
-          <button className="btn-primary" onClick={() => { setTargetStage('nuevo'); setIsModalOpen(true); }}>
-            <Plus size={18} /> Nuevo Trato
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="CRM & Pipeline"
+        subtitle={`Embudo abierto: ${currency(totalPipeline)}`}
+        aside={
+          <ModuleTutorial
+            title="Pipeline"
+            description="Mueve tus tratos por el embudo para cerrar más negocios."
+            steps={TUTORIAL_STEPS}
+          />
+        }
+        actions={
+          /* Se retira el botón "Filtros": no tenía ninguna acción asociada. */
+          <Button icon={<Plus size={18} />} onClick={() => openCreate('nuevo')}>
+            Nuevo trato
+          </Button>
+        }
+      />
 
-      {/* PRD §4A — Stage validation error banner */}
-      <AnimatePresence>
-        {stageError && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)',
-              borderRadius: '12px', padding: '0.9rem 1.2rem', marginBottom: '1rem',
-              color: 'var(--error)', fontSize: '0.875rem'
-            }}
-          >
-            <AlertTriangle size={18} style={{ flexShrink: 0 }} />
-            <span>{stageError}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {stageError && (
+        <div className="alert alert--danger">
+          <AlertTriangle size={18} />
+          <span>{stageError}</span>
+        </div>
+      )}
 
       <div className="pipeline-container">
-        {pipelineStages.map(stage => {
+        {STAGES.map((stage) => {
           const stageDeals = deals[stage.id] || [];
-          const totalValue = stageDeals.reduce((acc: number, d: any) => acc + (d.value || 0), 0);
+          const total = stageDeals.reduce((acc: number, d: any) => acc + (d.value || 0), 0);
 
           return (
-            <div
+            <section
               key={stage.id}
               className={`pipeline-column ${activeColumn === stage.id ? 'drag-over' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setActiveColumn(stage.id); }}
               onDragLeave={() => setActiveColumn(null)}
-              onDrop={(e) => onDrop(e, stage.id)}
+              onDrop={(e) => handleDrop(e, stage.id)}
             >
-              <div className="column-header">
+              <header className="column-header">
                 <div>
                   <h3>{stage.name}</h3>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--purple-light)', fontWeight: 700 }}>${totalValue.toLocaleString()}</p>
+                  <p className="column-total">{compactCurrency(total)}</p>
                 </div>
                 <span className="deal-count">{stageDeals.length}</span>
-              </div>
+              </header>
 
               <div className="column-content">
+                {stageDeals.length === 0 && (
+                  <p className="column-empty">Sin tratos</p>
+                )}
+
                 {stageDeals.map((deal: any) => (
-                  <div
+                  <article
                     key={deal._id}
-                    className="deal-card"
+                    className={`deal-card${movingId === deal._id ? ' is-moving' : ''}`}
                     draggable
-                    onDragStart={(e) => onDragStart(e, deal, stage.id)}
-                    style={{ opacity: isMoving ? 0.6 : 1, transition: 'opacity 0.2s' }}
+                    onDragStart={() => { setDragged({ deal, fromStage: stage.id }); setStageError(null); }}
+                    onDragEnd={() => setDragged(null)}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div className="deal-card-head">
                       <h4>{deal.company}</h4>
-                      <MoreVertical size={14} opacity={0.5} />
+                      <button
+                        className="icon-action icon-action--danger"
+                        onClick={() => setPendingDelete({ deal, stage: stage.id })}
+                        aria-label={`Eliminar trato ${deal.company}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                    <span className="deal-value">${(deal.value || 0).toLocaleString()}</span>
-                    <div className="deal-footer">
-                      <span>{deal.contact}</span>
-                      <span className="deal-tag">{deal.days || 0}d</span>
-                    </div>
-                  </div>
+
+                    <span className="deal-value">{currency(deal.value)}</span>
+
+                    {deal.contact && <p className="deal-contact">{deal.contact}</p>}
+
+                    {/* Alternativa al arrastre. Sin esto el tablero era
+                        inoperable con teclado y en pantallas táctiles. */}
+                    <label className="deal-stage-select">
+                      <span className="sr-only">Etapa de {deal.company}</span>
+                      <select
+                        value={stage.id}
+                        disabled={movingId === deal._id}
+                        onChange={(e) => requestStageChange(deal, stage.id, e.target.value)}
+                      >
+                        {STAGES.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </article>
                 ))}
-                <button className="add-deal-btn" onClick={() => { setTargetStage(stage.id); setIsModalOpen(true); }}>
+
+                <button className="add-deal-btn" onClick={() => openCreate(stage.id)}>
                   <Plus size={14} /> Añadir
                 </button>
               </div>
-            </div>
+            </section>
           );
         })}
       </div>
 
-      {/* ── New Deal Modal ──────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="modal-overlay modal-center" onClick={() => setIsModalOpen(false)}>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="modal-content-centered" onClick={e => e.stopPropagation()}>
-              <h2 style={{ marginBottom: '1.5rem' }}>Nuevo Trato en {pipelineStages.find(s => s.id === targetStage)?.name}</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Empresa</label>
-                  <input style={{ width: '100%' }} type="text" value={newDeal.company} onChange={e => setNewDeal({ ...newDeal, company: e.target.value })} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Contacto</label>
-                  <input style={{ width: '100%' }} type="text" value={newDeal.contact} onChange={e => setNewDeal({ ...newDeal, contact: e.target.value })} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Valor del Trato ($)</label>
-                  <input style={{ width: '100%' }} type="number" value={newDeal.value} onChange={e => setNewDeal({ ...newDeal, value: e.target.value })} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-                <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                <button className="btn-primary" style={{ flex: 1 }} onClick={handleAddDeal}>Crear Trato</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* ── Alta de trato ─────────────────────────────────────────────────── */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setModalOpen(false)}
+        title={`Nuevo trato en ${STAGES.find((s) => s.id === targetStage)?.name}`}
+        width="480px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreate}>Crear trato</Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <Field label="Empresa" value={draft.company} onChange={(v) => setDraft({ ...draft, company: v })} />
+          <Field label="Contacto" value={draft.contact} onChange={(v) => setDraft({ ...draft, contact: v })} />
+          <Field label="Valor del trato" type="number" value={draft.value} onChange={(v) => setDraft({ ...draft, value: v })} />
+        </div>
+      </Modal>
 
-      {/* ── PRD §4B — Cierre Confirmation Modal ────────────────────────── */}
-      <AnimatePresence>
-        {closureConfirm && (
-          <div className="modal-overlay modal-center" onClick={() => setClosureConfirm(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="modal-content-centered"
-              onClick={e => e.stopPropagation()}
-              style={{ maxWidth: '420px', textAlign: 'center' }}
+      {/* ── Confirmación de cierre (PRD §4B) ──────────────────────────────── */}
+      <Modal
+        isOpen={!!closureConfirm}
+        onClose={() => setClosureConfirm(null)}
+        title="Cerrar trato"
+        width="440px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setClosureConfirm(null)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                const { deal, fromStage } = closureConfirm;
+                setClosureConfirm(null);
+                changeStage(deal, fromStage, 'cierre');
+              }}
             >
-              <div style={{ marginBottom: '1.5rem' }}>
-                <Trophy size={48} color="var(--purple-main)" style={{ margin: '0 auto 1rem' }} />
-                <h2 style={{ marginBottom: '0.5rem' }}>¡Cerrar Trato!</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-                  Estás a punto de marcar <strong style={{ color: 'var(--text-primary)' }}>{closureConfirm.deal.company}</strong> como cerrado.
-                </p>
-                <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: 'rgba(124, 58, 237, 0.08)', borderRadius: '10px', border: '1px solid rgba(124, 58, 237, 0.2)', fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'left' }}>
-                  <p style={{ marginBottom: '4px' }}>✅ El cliente será promovido a <strong>Activo</strong></p>
-                  <p style={{ marginBottom: '4px' }}>✅ La cotización en Borrador será <strong>Aprobada</strong></p>
-                  <p style={{ marginBottom: '4px' }}>✅ Se creará un registro <strong>CxC</strong> en Finanzas</p>
-                  <p>✅ Se notificará a <strong>n8n</strong> para el onboarding</p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setClosureConfirm(null)}>
-                  Cancelar
-                </button>
-                <button className="btn-primary" style={{ flex: 1 }} onClick={handleConfirmClosure}>
-                  Confirmar Cierre
-                </button>
-              </div>
-            </motion.div>
+              Confirmar cierre
+            </Button>
+          </>
+        }
+      >
+        {closureConfirm && (
+          <div className="closure-confirm">
+            <Trophy size={40} />
+            <p>
+              Vas a marcar <strong>{closureConfirm.deal.company}</strong> como cerrado.
+              Esto encadena cuatro acciones automáticas:
+            </p>
+            <ul className="plain">
+              <li className="done">El cliente pasa a <strong>Activo</strong></li>
+              <li className="done">La cotización en Borrador se marca <strong>Aprobada</strong></li>
+              <li className="done">Se genera la <strong>cuenta por cobrar</strong> en Finanzas</li>
+              <li className="done">Se notifica a <strong>n8n</strong> para el onboarding</li>
+            </ul>
           </div>
         )}
-      </AnimatePresence>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        title="Eliminar trato"
+        message={
+          <>Se eliminará <strong>{pendingDelete?.deal.company}</strong> del pipeline. Esta acción no se puede deshacer.</>
+        }
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={async () => {
+          await deleteDeal(pendingDelete.stage, pendingDelete.deal._id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };

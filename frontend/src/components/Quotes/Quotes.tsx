@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, FileText, Trash2, ExternalLink, Sparkles, Send, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import ModuleTutorial from '../Common/ModuleTutorial';
 import QuoteWizard from './QuoteWizard';
 import CustomQuoteBuilder from './CustomQuoteBuilder';
 import QuotePreview from './QuotePreview';
-import QuoteSettings from './QuoteSettings';
 import { Badge, Button, PageHeader, DataTable, ConfirmDialog } from '../ui';
 import { currency, date as formatDate } from '../../lib/format';
 import { statusLabel } from '../../lib/constants';
@@ -20,10 +20,10 @@ const TUTORIAL_STEPS = [
 
 const Quotes = () => {
   const { quotes, deleteQuote, updateQuote } = useApp();
+  const navigate = useNavigate();
 
   const [isWizardOpen, setWizardOpen] = useState(false);
   const [isCustomOpen, setCustomOpen] = useState(false);
-  const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isPreviewOpen, setPreviewOpen] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any>(null);
   const [pendingDelete, setPendingDelete] = useState<any>(null);
@@ -98,8 +98,8 @@ const Quotes = () => {
             </div>
             <button
               className="icon-action"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Configurar plantilla de cotización"
+              onClick={() => navigate('/configuracion')}
+              aria-label="Ir a la configuración de la plantilla"
               title="Configurar plantilla"
             >
               <Settings size={18} />
@@ -210,7 +210,6 @@ const Quotes = () => {
 
       <QuoteWizard isOpen={isWizardOpen} onClose={() => setWizardOpen(false)} />
       <CustomQuoteBuilder isOpen={isCustomOpen} onClose={() => setCustomOpen(false)} />
-      <QuoteSettings isOpen={isSettingsOpen} onClose={() => setSettingsOpen(false)} />
       <QuotePreview quote={selectedQuote} isOpen={isPreviewOpen} onClose={() => setPreviewOpen(false)} />
 
       <ConfirmDialog

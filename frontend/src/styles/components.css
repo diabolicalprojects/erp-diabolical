@@ -1246,3 +1246,257 @@ input:-webkit-autofill:focus {
     color: var(--success);
     border: 1px solid var(--success-bg);
 }
+
+/* ── Pipeline ──────────────────────────────────────────────────────────── */
+.column-total {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.column-empty {
+    padding: var(--space-4) 0;
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.deal-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.deal-card-head h4 {
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+/* Sólo se atenúa la tarjeta que se está moviendo; antes se atenuaba el
+   tablero entero mientras durase cualquier petición. */
+.deal-card.is-moving {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.deal-contact {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* Alternativa accesible al arrastrar y soltar. */
+.deal-stage-select {
+    display: block;
+    margin-top: var(--space-3);
+}
+
+.deal-stage-select select {
+    width: 100%;
+    padding: 0.35rem var(--space-2);
+    font-size: var(--text-xs);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.deal-stage-select select:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+/* Sólo para lectores de pantalla. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.closure-confirm {
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.closure-confirm svg {
+    color: var(--text-primary);
+    margin-bottom: var(--space-3);
+}
+
+.closure-confirm p {
+    margin-bottom: var(--space-4);
+}
+
+.closure-confirm strong {
+    color: var(--text-primary);
+}
+
+.closure-confirm ul {
+    text-align: left;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+}
+
+/* ── Métricas ──────────────────────────────────────────────────────────── */
+.metrics-page {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.metrics-summary {
+    margin-bottom: var(--space-5);
+}
+
+.metrics-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+/* Lectura del periodo derivada de las cifras, no texto fijo. */
+.metrics-reading {
+    padding: var(--space-4);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    font-size: var(--text-base);
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+}
+
+@media (max-width: 900px) {
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.chart-card .section-title {
+    font-size: var(--text-md);
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--text-primary);
+}
+
+.chart-box {
+    height: 260px;
+    width: 100%;
+}
+
+.chart-box--tall {
+    height: 320px;
+}
+
+/* El texto del gráfico usa tokens de tinta, nunca el color de la serie. */
+.chart-tooltip {
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+}
+
+.chart-tooltip-label {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.chart-tooltip p {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-secondary);
+}
+
+.chart-tooltip-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ── Configuración ─────────────────────────────────────────────────────── */
+.settings-page .glass-card {
+    padding: var(--space-5);
+}
+
+.logo-row {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    flex-wrap: wrap;
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.logo-preview {
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--glass);
+    overflow: hidden;
+}
+
+.logo-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.logo-preview span {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.conditions-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.conditions-head h4 {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+}
+
+.condition-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1.6fr 90px auto;
+    gap: var(--space-3);
+    align-items: end;
+}
+
+@media (max-width: 700px) {
+    .condition-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}

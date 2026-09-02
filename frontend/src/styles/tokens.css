@@ -55,6 +55,29 @@
     --neutral: var(--text-secondary);
     --neutral-bg: var(--glass);
 
+
+    /* ── Gráficos ─────────────────────────────────────────────────────────────
+       Paletas validadas con el verificador de contraste y visión de color.
+       La anterior (#7c3aed, #a78bfa, #6366f1, #10b981) fallaba: el índigo y el
+       morado claro estaban a ΔE 14.1, indistinguibles incluso con visión de
+       color normal, y sólo tenía cuatro colores para cinco etapas de embudo,
+       así que dos salían idénticas.
+
+       Series (ingresos / costos): dos tonos categóricos, ΔE 26.8 en el peor
+       caso de daltonismo. */
+    --chart-series-1: #3585e0;
+    --chart-series-2: #c26f14;
+
+    /* Embudo: las etapas tienen orden, así que es una rampa ordinal de un solo
+       tono (claro → oscuro), no colores arbitrarios. */
+    --chart-step-1: #1e4d80;
+    --chart-step-2: #2a6ba8;
+    --chart-step-3: #3b8ed0;
+    --chart-step-4: #63aee0;
+    --chart-step-5: #96caea;
+
+    --chart-grid: var(--glass-border);
+
     /* ── Escala de espaciado ──────────────────────────────────────────────── */
     --space-1: 0.25rem;
     --space-2: 0.5rem;
@@ -136,6 +159,16 @@
     --danger-bg: rgba(185, 28, 28, 0.1);
     --info: #1d4ed8;
     --info-bg: rgba(29, 78, 216, 0.1);
+
+    /* Gráficos: mismos papeles, escalonados para fondo claro. */
+    --chart-series-1: #1f6feb;
+    --chart-series-2: #b45309;
+
+    --chart-step-1: #6fa6d6;
+    --chart-step-2: #5591c8;
+    --chart-step-3: #3a74ad;
+    --chart-step-4: #255790;
+    --chart-step-5: #123a6b;
 }
 
 /* Respeta la preferencia del sistema de reducir movimiento. El splash y las
