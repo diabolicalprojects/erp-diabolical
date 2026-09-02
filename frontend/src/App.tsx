@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 
 import { AppProvider, useApp } from './context/AppContext';
@@ -91,18 +90,22 @@ const AppContent = () => {
 
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
 
+        {/* La aplicación se monta siempre; la bienvenida es una capa encima que
+            se quita sola. Antes iban como alternativas dentro de
+            <AnimatePresence mode="wait">, lo que obligaba a esperar la
+            animación de salida del splash para montar la app — y esa animación
+            depende de requestAnimationFrame, que el navegador congela en una
+            pestaña en segundo plano. El resultado era que la app nunca llegaba
+            a montarse. Una animación decorativa no puede bloquear el acceso. */}
         <Route
           path="/*"
           element={
-            <AnimatePresence mode="wait">
-              {!splashDone ? (
-                <SplashScreen key="splash" onFinish={() => setSplashDone(true)} />
-              ) : (
-                <ProtectedRoute key="app">
-                  <AppLayout />
-                </ProtectedRoute>
-              )}
-            </AnimatePresence>
+            <>
+              {!splashDone && <SplashScreen onFinish={() => setSplashDone(true)} />}
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            </>
           }
         />
       </Routes>

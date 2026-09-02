@@ -33,12 +33,7 @@ const SplashScreen = ({ onFinish }: { onFinish: () => void }) => {
   }, []);
 
   return (
-    <motion.div
-      className="splash"
-      initial={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.8, ease: 'easeInOut' }}
-    >
+    <div className="splash">
       <motion.div
         className="splash-mark"
         initial={{ scale: 0.5, opacity: 0, y: 20 }}
@@ -65,7 +60,7 @@ const SplashScreen = ({ onFinish }: { onFinish: () => void }) => {
           onAnimationComplete={finishOnce}
         />
       </div>
-    </motion.div>
+    </div>
   );
 };
 
