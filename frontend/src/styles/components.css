@@ -654,3 +654,342 @@ textarea.field-input {
 .data-table td .badge {
     margin-left: var(--space-2);
 }
+
+/* ============================================================================
+   CONTROLES DE FORMULARIO — BASE GLOBAL
+   ============================================================================
+   Los módulos sin migrar estilan sus inputs inline y algunos fijan colores
+   absolutos (`background: '#111'`), que en tema claro se ven como cajas negras.
+   Estas reglas dan una base correcta en ambos temas a todo control que no
+   traiga estilo propio.
+   ========================================================================== */
+/* `:where()` no aporta especificidad: esto es una capa base que CUALQUIER
+   regla de componente puede sobrescribir. Sin ella, este selector ganaba a
+   `.search-bar-wrapper input` y le anulaba el padding izquierdo, dejando el
+   texto debajo del icono de la lupa. */
+:where(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+    font-family: inherit;
+    font-size: var(--text-base);
+    color: var(--text-primary);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 0.7rem var(--space-3);
+    transition: border-color var(--transition-fast);
+}
+
+:where(input:not([type='checkbox']):not([type='radio']), select, textarea):focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+:where(input, textarea)::placeholder {
+    color: var(--text-muted);
+}
+
+/* El desplegable nativo hereda el color del sistema si no se fuerza; en tema
+   claro con fondo oscuro el texto quedaba ilegible. */
+:where(select option) {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* Autorrelleno de Chrome: pinta un fondo blanco fijo que rompe el tema oscuro. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--text-primary);
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-card) inset;
+    caret-color: var(--text-primary);
+}
+
+/* ── Botones heredados ─────────────────────────────────────────────────────
+   Los módulos sin migrar usan .btn-primary / .btn-secondary. El texto se
+   partía en dos líneas al estrecharse el encabezado ("Nuevo / Cliente"). */
+.btn-primary,
+.btn-secondary {
+    white-space: nowrap;
+    justify-content: center;
+}
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ── Encabezado de página ────────────────────────────────────────────────── */
+.page-header {
+    flex-wrap: wrap;
+}
+
+.header-actions {
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* El buscador declaraba `width: 100%`, así que ocupaba toda la fila y empujaba
+   al botón a una segunda línea. Ahora se encoge para que ambos convivan; sólo
+   se apilan cuando la pantalla es realmente estrecha. */
+.header-actions {
+    flex-wrap: nowrap;
+}
+
+.header-actions .search-bar-wrapper {
+    width: auto;
+    flex: 0 1 280px;
+    min-width: 0;
+}
+
+@media (max-width: 720px) {
+    .header-actions {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .header-actions .search-bar-wrapper {
+        flex: 1 1 100%;
+    }
+}
+
+/* ── Identidad de la barra lateral ─────────────────────────────────────────
+   El logotipo y el nombre iban apretados en la esquina sin respiración. */
+.sidebar-logo img {
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+}
+
+.sidebar-logo span {
+    font-family: 'Nexa Bold', sans-serif;
+    font-size: 1.05rem;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+/* ============================================================================
+   DIRECTORIO DE CLIENTES
+   ========================================================================== */
+
+.entity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-4);
+    align-items: stretch;
+}
+
+/* La tarjeta es un botón: antes sólo "Ver Perfil" abría la ficha, aunque toda
+   la superficie parecía pulsable. `height: 100%` + footer con `margin-top:auto`
+   igualan las alturas — una tarjeta sin teléfono ni correo se quedaba más baja
+   y desalineaba la fila. */
+.entity-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: var(--space-4);
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.entity-card:hover {
+    border-color: var(--text-muted);
+    transform: translateY(-2px);
+}
+
+.entity-card:active {
+    transform: none;
+}
+
+.entity-card-head {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    margin-bottom: var(--space-4);
+    min-width: 0;
+}
+
+/* Iniciales en vez del icono genérico de persona, que era idéntico en todas
+   las tarjetas y no aportaba nada. Mismo criterio que el avatar del usuario. */
+.entity-avatar {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Nexa Bold', sans-serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+    background: var(--glass);
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+}
+
+.entity-card-id {
+    min-width: 0;
+    flex: 1;
+}
+
+/* Dos líneas antes de recortar: los nombres largos de razón social se cortaban
+   a media palabra en una sola línea. */
+.entity-name {
+    font-family: 'Nexa Bold', sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.entity-contact {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.entity-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    min-width: 0;
+}
+
+.entity-field {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    min-width: 0;
+}
+
+.entity-field svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.entity-field span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.entity-field--empty {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* `margin-top: auto` fija el pie al fondo, de modo que la insignia y la acción
+   quedan alineadas entre todas las tarjetas de la fila. */
+.entity-card-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding-top: var(--space-4);
+}
+
+.entity-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    transition: color var(--transition-fast);
+}
+
+.entity-card:hover .entity-action {
+    color: var(--text-primary);
+}
+
+/* Contador junto al título: sitúa cuántos registros hay sin abrir un panel. */
+.page-count {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Ficha lateral ─────────────────────────────────────────────────────────*/
+.detail-hero {
+    display: flex;
+    gap: var(--space-4);
+    align-items: center;
+    margin-bottom: var(--space-5);
+}
+
+.detail-hero .entity-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 1.15rem;
+}
+
+.detail-section {
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.detail-section h4 {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+}
+
+.detail-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+}
+
+.detail-stat {
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+}
+
+.detail-stat span {
+    display: block;
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+
+.detail-stat strong {
+    font-family: 'Nexa Bold', sans-serif;
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+}
+
+.form-grid .field--full {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 560px) {
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}

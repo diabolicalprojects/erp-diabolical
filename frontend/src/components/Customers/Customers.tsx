@@ -1,213 +1,343 @@
-import React, { useState } from 'react';
-import { Search, Plus, User, Phone, Mail, X, Trash2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Search, Plus, Phone, Mail, MapPin, MessageCircle, Trash2, ChevronRight, Users } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { motion, AnimatePresence } from 'framer-motion';
 import ModuleTutorial from '../Common/ModuleTutorial';
+import { Modal, Field, Badge, Button, PageHeader, EmptyState } from '../ui';
+import { CUSTOMER_STATUSES, statusLabel } from '../../lib/constants';
+
+const TUTORIAL_STEPS = [
+  'Usa el buscador para filtrar por empresa, contacto o correo.',
+  'Pulsa cualquier tarjeta para abrir la ficha completa del cliente.',
+  'La insignia de color indica el estatus comercial de la cuenta.',
+  'Desde la ficha puedes editar los datos o eliminar el cliente.'
+];
+
+/** Iniciales para el avatar: "REP CALISTHENICS" -> "RC". */
+const initials = (name = '') =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase() || '—';
+
+const EMPTY_CUSTOMER = {
+  name: '', contact: '', phone: '', email: '',
+  status: 'potencial', address: '', altContact: ''
+};
+
+/** Fila de dato de contacto. No se renderiza si no hay valor: antes quedaban
+ *  iconos sueltos sin texto en los clientes sin teléfono ni correo. */
+const ContactField = ({ icon: Icon, value }: { icon: any; value?: string }) => {
+  if (!value) return null;
+  return (
+    <div className="entity-field">
+      <Icon size={14} />
+      <span title={value}>{value}</span>
+    </div>
+  );
+};
 
 const Customers = () => {
-  const { customers, customerStatuses, addCustomer, updateCustomer, deleteCustomer } = useApp();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [newCust, setNewCust] = useState({ name: '', contact: '', phone: '', email: '', status: 'potencial', address: '', altContact: '' });
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const { customers, addCustomer, updateCustomer, deleteCustomer } = useApp();
 
-  const tutorialSteps = [
-    "Usa la barra superior para filtrar clientes por nombre o empresa.",
-    "Haz clic en 'Ver Perfil' para abrir la ficha técnica lateral.",
-    "Los colores indican el estatus comercial de cada cuenta.",
-    "Puedes eliminar o editar clientes directamente desde su perfil."
-  ];
+  const [search, setSearch] = useState('');
+  const [isCreateOpen, setCreateOpen] = useState(false);
+  const [draft, setDraft] = useState<any>(EMPTY_CUSTOMER);
+  const [selected, setSelected] = useState<any>(null);
+  const [isEditing, setEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'activo': return 'var(--success)';
-      case 'potencial': return 'var(--purple-main)';
-      case 'en_pausa': return 'var(--warning)';
-      default: return 'var(--text-secondary)';
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return customers || [];
+    // Se busca también por correo: era el dato por el que más se identifica a
+    // un contacto y el filtro anterior lo ignoraba.
+    return (customers || []).filter((c: any) =>
+      [c.name, c.contact, c.email].some((f: string) => (f || '').toLowerCase().includes(term))
+    );
+  }, [customers, search]);
+
+  const setDraftField = (field: string) => (value: string) =>
+    setDraft((prev: any) => ({ ...prev, [field]: value }));
+
+  const setSelectedField = (field: string) => (value: string) =>
+    setSelected((prev: any) => ({ ...prev, [field]: value }));
+
+  const handleCreate = async () => {
+    if (!draft.name.trim()) {
+      setError('El nombre de la empresa es obligatorio');
+      return;
     }
-  };
-
-  const handleSave = async () => {
     try {
-      await addCustomer({ ...newCust, deals: 0 });
-      setIsModalOpen(false);
-      setNewCust({ name: '', contact: '', phone: '', email: '', status: 'potencial', address: '', altContact: '' });
-    } catch (err) { console.error(err); }
+      await addCustomer({ ...draft, deals: 0 });
+      setCreateOpen(false);
+      setDraft(EMPTY_CUSTOMER);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo guardar el cliente');
+    }
   };
 
   const handleUpdate = async () => {
     try {
-      await updateCustomer(selectedClient._id, selectedClient);
-      setIsEditing(false);
-    } catch (err) { console.error(err); }
+      await updateCustomer(selected._id, selected);
+      setEditing(false);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo actualizar el cliente');
+    }
   };
 
-  const filteredCustomers = (customers || []).filter((c: any) =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.contact.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleDelete = async () => {
+    try {
+      await deleteCustomer(selected._id);
+      setSelected(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo eliminar el cliente');
+    }
+  };
+
+  const closeDetail = () => {
+    setSelected(null);
+    setEditing(false);
+    setError(null);
+  };
 
   return (
     <div className="animate-fade">
-      <header className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div>
-            <h1>Directorio de Clientes</h1>
-            <p className="subtitle">Gestión centralizada de contactos</p>
-          </div>
-          <ModuleTutorial title="Clientes" description="Mantén el control de tus clientes y analiza su estatus desde un solo lugar." steps={tutorialSteps} />
+      <PageHeader
+        title="Directorio de Clientes"
+        subtitle="Gestión centralizada de contactos"
+        aside={
+          <ModuleTutorial
+            title="Clientes"
+            description="Mantén el control de tus clientes y su estatus desde un solo lugar."
+            steps={TUTORIAL_STEPS}
+          />
+        }
+        actions={
+          <>
+            <div className="search-bar-wrapper">
+              <Search className="search-bar-icon" size={18} />
+              <input
+                type="search"
+                placeholder="Buscar por empresa, contacto o correo…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Buscar cliente"
+              />
+            </div>
+            <Button icon={<Plus size={18} />} onClick={() => setCreateOpen(true)}>
+              Nuevo cliente
+            </Button>
+          </>
+        }
+      />
+
+      {(customers || []).length > 0 && (
+        <p className="page-count" style={{ marginBottom: 'var(--space-4)' }}>
+          {filtered.length} de {customers.length}{' '}
+          {customers.length === 1 ? 'cliente' : 'clientes'}
+        </p>
+      )}
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={<Users size={32} />}
+          title={search ? 'Sin coincidencias' : 'Aún no hay clientes'}
+          description={
+            search
+              ? `Ningún cliente coincide con "${search}".`
+              : 'Da de alta tu primer cliente para empezar a cotizar.'
+          }
+          action={
+            search ? (
+              <Button variant="secondary" onClick={() => setSearch('')}>Limpiar búsqueda</Button>
+            ) : (
+              <Button icon={<Plus size={18} />} onClick={() => setCreateOpen(true)}>
+                Nuevo cliente
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <div className="entity-grid">
+          {filtered.map((c: any) => {
+            const hasContactData = c.phone || c.email;
+            return (
+              <button
+                key={c._id}
+                type="button"
+                className="entity-card"
+                onClick={() => setSelected(c)}
+                aria-label={`Ver ficha de ${c.name}`}
+              >
+                <div className="entity-card-head">
+                  <div className="entity-avatar" aria-hidden>{initials(c.name)}</div>
+                  <div className="entity-card-id">
+                    <p className="entity-name" title={c.name}>{c.name}</p>
+                    {c.contact && <p className="entity-contact">{c.contact}</p>}
+                  </div>
+                </div>
+
+                <div className="entity-fields">
+                  {hasContactData ? (
+                    <>
+                      <ContactField icon={Phone} value={c.phone} />
+                      <ContactField icon={Mail} value={c.email} />
+                    </>
+                  ) : (
+                    <p className="entity-field entity-field--empty">Sin datos de contacto</p>
+                  )}
+                </div>
+
+                <div className="entity-card-foot">
+                  <Badge status={c.status}>{statusLabel(c.status)}</Badge>
+                  <span className="entity-action">
+                    Ver ficha <ChevronRight size={14} />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
-        <div className="header-actions">
-          <div className="search-bar-wrapper">
-            <Search className="search-bar-icon" size={18} />
-            <input type="text" placeholder="Buscar cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
-          <button className="btn-primary" onClick={() => setIsModalOpen(true)}>
-            <Plus size={18} /> Nuevo Cliente
-          </button>
-        </div>
-      </header>
+      )}
 
-      <div className="customer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-        {filteredCustomers.map((c: any) => (
-          <div key={c._id} className="glass-card">
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div className="avatar" style={{ width: '50px', height: '50px', background: 'var(--glass)', border: `2px solid ${getStatusColor(c.status)}` }}>
-                <User size={24} />
-              </div>
-              <div style={{ overflow: 'hidden' }}>
-                <h4 style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{c.name}</h4>
-                <p className="subtitle">{c.contact}</p>
-              </div>
-            </div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', gap: '8px' }}><Phone size={14} /> {c.phone}</div>
-              <div style={{ display: 'flex', gap: '8px' }}><Mail size={14} /> {c.email}</div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="status-badge" style={{ background: `${getStatusColor(c.status)}20`, color: getStatusColor(c.status) }}>{c.status}</span>
-              <button className="btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }} onClick={() => setSelectedClient(c)}>Ver Perfil</button>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* ── Ficha lateral ─────────────────────────────────────────────────── */}
+      <Modal
+        isOpen={!!selected}
+        onClose={closeDetail}
+        variant="side"
+        title="Ficha del cliente"
+        footer={
+          <>
+            <Button variant="danger" icon={<Trash2 size={18} />} onClick={handleDelete}>
+              Eliminar
+            </Button>
+            {isEditing ? (
+              <Button onClick={handleUpdate}>Guardar cambios</Button>
+            ) : (
+              <Button onClick={() => setEditing(true)}>Editar cliente</Button>
+            )}
+          </>
+        }
+      >
+        {selected && (
+          <>
+            {error && <div className="alert alert--danger">{error}</div>}
 
-      <AnimatePresence>
-        {selectedClient && (
-          <div className="modal-overlay modal-side" onClick={() => setSelectedClient(null)}>
-            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 20 }} className="modal-content-container" onClick={e => e.stopPropagation()}>
-              <div style={{ padding: '2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
-                  <h2>Ficha del Cliente</h2>
-                  <button className="btn-secondary" onClick={() => setSelectedClient(null)} style={{ padding: '0.5rem' }}><X size={20} /></button>
-                </div>
-                <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-                  <div className="avatar" style={{ width: '80px', height: '80px', margin: '0 auto 1rem', background: 'var(--glass)', border: `3px solid ${getStatusColor(selectedClient.status)}` }}>
-                    <User size={40} />
-                  </div>
-                  {isEditing ? (
-                    <input style={{ fontSize: '1.5rem', width: '100%', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} value={selectedClient.name} onChange={e => setSelectedClient({ ...selectedClient, name: e.target.value })} />
-                  ) : (
-                    <h3 style={{ fontSize: '1.5rem' }}>{selectedClient.name}</h3>
-                  )}
-                  {isEditing ? (
-                    <input style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-secondary)', borderBottom: '1px solid var(--glass-border)', marginTop: '5px' }} value={selectedClient.contact} onChange={e => setSelectedClient({ ...selectedClient, contact: e.target.value })} />
-                  ) : (
-                    <p className="subtitle">{selectedClient.contact}</p>
-                  )}
-                </div>
-                <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-                  <h4 style={{ marginBottom: '1rem' }}>Contacto</h4>
-                  {isEditing ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <input style={{ width: '100%' }} type="text" placeholder="Teléfono" value={selectedClient.phone} onChange={e => setSelectedClient({ ...selectedClient, phone: e.target.value })} />
-                      <input style={{ width: '100%' }} type="text" placeholder="Email" value={selectedClient.email} onChange={e => setSelectedClient({ ...selectedClient, email: e.target.value })} />
-                      <input style={{ width: '100%' }} type="text" placeholder="Dirección" value={selectedClient.address || ''} onChange={e => setSelectedClient({ ...selectedClient, address: e.target.value })} />
-                      <input style={{ width: '100%' }} type="text" placeholder="Otro Medio Contacto" value={selectedClient.altContact || ''} onChange={e => setSelectedClient({ ...selectedClient, altContact: e.target.value })} />
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem' }}>
-                      <div style={{ display: 'flex', gap: '10px' }}><Phone size={16} opacity={0.6} /> {selectedClient.phone}</div>
-                      <div style={{ display: 'flex', gap: '10px' }}><Mail size={16} opacity={0.6} /> {selectedClient.email}</div>
-                      {selectedClient.address && <div style={{ display: 'flex', gap: '10px' }}>📍 {selectedClient.address}</div>}
-                      {selectedClient.altContact && <div style={{ display: 'flex', gap: '10px' }}>💬 {selectedClient.altContact}</div>}
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="glass-card" style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tratos</p>
-                    <h4>{selectedClient.deals}</h4>
-                  </div>
-                  <div className="glass-card" style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Saldo</p>
-                    <h4>$0</h4>
-                  </div>
-                </div>
-                <div style={{ marginTop: '2.5rem', display: 'flex', gap: '1rem' }}>
-                  <button className="btn-secondary" style={{ flex: 1, color: 'var(--error)' }} onClick={async () => { await deleteCustomer(selectedClient._id); setSelectedClient(null); }}>
-                    <Trash2 size={18} /> Eliminar
-                  </button>
-                  {isEditing ? (
-                    <button className="btn-primary" style={{ flex: 1.5 }} onClick={handleUpdate}>Guardar Cambios</button>
-                  ) : (
-                    <button className="btn-primary" style={{ flex: 1.5 }} onClick={() => setIsEditing(true)}>Editar Cliente</button>
-                  )}
+            <div className="detail-hero">
+              <div className="entity-avatar" aria-hidden>{initials(selected.name)}</div>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ overflowWrap: 'anywhere' }}>{selected.name}</h3>
+                {selected.contact && <p className="subtitle">{selected.contact}</p>}
+                <div style={{ marginTop: 'var(--space-2)' }}>
+                  <Badge status={selected.status}>{statusLabel(selected.status)}</Badge>
                 </div>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            </div>
 
-      <AnimatePresence>
-        {isModalOpen && (
-          <div className="modal-overlay modal-center" onClick={() => setIsModalOpen(false)}>
-            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }} className="modal-content-centered" onClick={e => e.stopPropagation()}>
-              <h2 style={{ marginBottom: '1.5rem' }}>Añadir Cliente</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Nombre Empresa</label>
-                  <input style={{ width: '100%' }} type="text" value={newCust.name} onChange={e => setNewCust({ ...newCust, name: e.target.value })} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Contacto</label>
-                  <input style={{ width: '100%' }} type="text" value={newCust.contact} onChange={e => setNewCust({ ...newCust, contact: e.target.value })} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Teléfono</label>
-                    <input style={{ width: '100%' }} type="text" value={newCust.phone} onChange={e => setNewCust({ ...newCust, phone: e.target.value })} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Email</label>
-                    <input style={{ width: '100%' }} type="email" value={newCust.email} onChange={e => setNewCust({ ...newCust, email: e.target.value })} />
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Dirección</label>
-                    <input style={{ width: '100%' }} type="text" value={newCust.address} onChange={e => setNewCust({ ...newCust, address: e.target.value })} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Medio de Contacto (Opcional)</label>
-                    <input style={{ width: '100%' }} type="text" placeholder="Ej: WhatsApp, Skype" value={newCust.altContact} onChange={e => setNewCust({ ...newCust, altContact: e.target.value })} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '5px' }}>Estatus</label>
-                    <select style={{ width: '100%', background: '#111', color: 'white' }} value={newCust.status} onChange={e => setNewCust({ ...newCust, status: e.target.value })}>
-                      {customerStatuses.map((s: string) => <option key={s} value={s}>{s}</option>)}
+            <div className="detail-section">
+              <h4>Contacto</h4>
+              {isEditing ? (
+                <div className="stack">
+                  <Field label="Empresa" value={selected.name} onChange={setSelectedField('name')} />
+                  <Field label="Contacto" value={selected.contact} onChange={setSelectedField('contact')} />
+                  <Field label="Teléfono" value={selected.phone} onChange={setSelectedField('phone')} />
+                  <Field label="Correo" type="email" value={selected.email} onChange={setSelectedField('email')} />
+                  <Field label="Dirección" value={selected.address} onChange={setSelectedField('address')} />
+                  <Field label="Otro medio" value={selected.altContact} onChange={setSelectedField('altContact')} hint="Ej: WhatsApp, Telegram" />
+                  <label className="field">
+                    <span className="field-label">Estatus</span>
+                    <select
+                      className="field-input"
+                      value={selected.status}
+                      onChange={(e) => setSelectedField('status')(e.target.value)}
+                    >
+                      {CUSTOMER_STATUSES.map((s) => (
+                        <option key={s} value={s}>{statusLabel(s)}</option>
+                      ))}
                     </select>
-                  </div>
+                  </label>
                 </div>
+              ) : (
+                <div className="entity-fields">
+                  <ContactField icon={Phone} value={selected.phone} />
+                  <ContactField icon={Mail} value={selected.email} />
+                  <ContactField icon={MapPin} value={selected.address} />
+                  <ContactField icon={MessageCircle} value={selected.altContact} />
+                  {!selected.phone && !selected.email && !selected.address && !selected.altContact && (
+                    <p className="entity-field entity-field--empty">Sin datos de contacto registrados</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="detail-stats">
+              <div className="detail-stat">
+                <span>Tratos</span>
+                <strong>{selected.deals ?? 0}</strong>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-                <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setIsModalOpen(false)}>Cancelar</button>
-                <button className="btn-primary" style={{ flex: 1 }} onClick={handleSave}>Guardar</button>
+              <div className="detail-stat">
+                <span>Saldo</span>
+                <strong>$0</strong>
               </div>
-            </motion.div>
-          </div>
+            </div>
+          </>
         )}
-      </AnimatePresence>
+      </Modal>
+
+      {/* ── Alta de cliente ───────────────────────────────────────────────── */}
+      <Modal
+        isOpen={isCreateOpen}
+        onClose={() => { setCreateOpen(false); setError(null); }}
+        title="Nuevo cliente"
+        width="600px"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setCreateOpen(false); setError(null); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreate}>Guardar cliente</Button>
+          </>
+        }
+      >
+        {error && <div className="alert alert--danger">{error}</div>}
+
+        <div className="form-grid">
+          <div className="field--full">
+            <Field label="Nombre de la empresa" value={draft.name} onChange={setDraftField('name')} />
+          </div>
+          <div className="field--full">
+            <Field label="Persona de contacto" value={draft.contact} onChange={setDraftField('contact')} />
+          </div>
+          <Field label="Teléfono" value={draft.phone} onChange={setDraftField('phone')} />
+          <Field label="Correo" type="email" value={draft.email} onChange={setDraftField('email')} />
+          <div className="field--full">
+            <Field label="Dirección" value={draft.address} onChange={setDraftField('address')} />
+          </div>
+          <Field
+            label="Otro medio"
+            value={draft.altContact}
+            onChange={setDraftField('altContact')}
+            hint="Ej: WhatsApp, Telegram"
+          />
+          <label className="field">
+            <span className="field-label">Estatus</span>
+            <select
+              className="field-input"
+              value={draft.status}
+              onChange={(e) => setDraftField('status')(e.target.value)}
+            >
+              {CUSTOMER_STATUSES.map((s) => (
+                <option key={s} value={s}>{statusLabel(s)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 };
