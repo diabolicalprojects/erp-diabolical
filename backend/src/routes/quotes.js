@@ -4,173 +4,126 @@ const Deal = require('../models/Deal');
 const Customer = require('../models/Customer');
 const QuoteSettings = require('../models/QuoteSettings');
 const auth = require('../middleware/auth');
+const asyncHandler = require('../utils/asyncHandler');
+const { NotFoundError } = require('../utils/errors');
+const { nextQuoteFolio } = require('../utils/folio');
+const { dispatch } = require('../services/webhookDispatcher');
+const { PUBLIC_SETTINGS_FIELDS, PAYMENT_SETTINGS_FIELDS } = require('../config/constants');
+
 const router = express.Router();
 
-// GET all quotes
-router.get('/', auth, async (req, res) => {
-  try {
-    const quotes = await Quote.find().sort({ createdAt: -1 });
-    res.json(quotes);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+// ─── GET todas las cotizaciones ───────────────────────────────────────────────
+router.get('/', auth, asyncHandler(async (req, res) => {
+  res.json(await Quote.find().sort({ createdAt: -1 }));
+}));
+
+// ─── GET cotización pública (sin auth) ────────────────────────────────────────
+// Debe declararse ANTES de `/:id` o Express interpretaría 'public' como un id.
+// Solo se exponen los campos de empresa de PUBLIC_SETTINGS_FIELDS (allow-list).
+// Los datos bancarios se adjuntan únicamente cuando la cotización ya salió de
+// borrador, para que un enlace compartido por error no filtre la CLABE.
+router.get('/public/:id', asyncHandler(async (req, res) => {
+  const quote = await Quote.findById(req.params.id);
+  if (!quote) throw new NotFoundError('Cotización no encontrada');
+
+  const settingsDoc = await QuoteSettings.findOne();
+  const settings = {};
+
+  if (settingsDoc) {
+    const fields = quote.status === 'draft'
+      ? PUBLIC_SETTINGS_FIELDS
+      : [...PUBLIC_SETTINGS_FIELDS, ...PAYMENT_SETTINGS_FIELDS];
+    for (const field of fields) settings[field] = settingsDoc[field];
   }
-});
 
-// GET public quote (no auth required)
-router.get('/public/:id', async (req, res) => {
-  try {
-    const quote = await Quote.findById(req.params.id);
-    if (!quote) return res.status(404).json({ error: 'Cotización no encontrada' });
-    
-    // Fetch company settings but only return public info
-    const settings = await QuoteSettings.findOne() || {};
-    
-    res.json({
-      quote,
-      settings: {
-        companyName: settings.companyName,
-        companyAddress: settings.companyAddress,
-        companyRFC: settings.companyRFC,
-        companyPhone: settings.companyPhone,
-        companyEmail: settings.companyEmail,
-        companyWebsite: settings.companyWebsite,
-        logoUrl: settings.logoUrl,
-        bankName: settings.bankName,
-        bankHolder: settings.bankHolder,
-        bankCLABE: settings.bankCLABE,
-        bankAccount: settings.bankAccount,
-        bankReference: settings.bankReference,
-        paymentConditions: settings.paymentConditions,
-        signatureLabelLeft: settings.signatureLabelLeft,
-        signatureLabelRight: settings.signatureLabelRight,
-        footerNote: settings.footerNote
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  res.json({ quote, settings });
+}));
+
+// ─── GET una cotización ───────────────────────────────────────────────────────
+router.get('/:id', auth, asyncHandler(async (req, res) => {
+  const quote = await Quote.findById(req.params.id);
+  if (!quote) throw new NotFoundError('Cotización no encontrada');
+  res.json(quote);
+}));
+
+// ─── POST crear cotización — PRD §4A ──────────────────────────────────────────
+// Al crear una cotización para un cliente conocido se siembra automáticamente
+// un Deal en el pipeline, para que el embudo refleje siempre la actividad real.
+router.post('/', auth, asyncHandler(async (req, res) => {
+  const folio = req.body.folio || await nextQuoteFolio();
+
+  // El frontend envía `customer` como nombre; resolvemos el registro real.
+  let customerId = req.body.client_id || null;
+  const customerName = (req.body.customer || '').trim();
+
+  if (!customerId && customerName) {
+    // Coincidencia exacta sin distinguir mayúsculas. Se escapan los
+    // metacaracteres para que un nombre como "A+B (S.A.)" no rompa el regex
+    // ni permita inyectar un patrón.
+    const escaped = customerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const found = await Customer.findOne({ name: { $regex: `^${escaped}$`, $options: 'i' } });
+    if (found) customerId = found._id;
   }
-});
 
-// GET single quote
-router.get('/:id', auth, async (req, res) => {
-  try {
-    const quote = await Quote.findById(req.params.id);
-    if (!quote) return res.status(404).json({ error: 'Cotización no encontrada' });
-    res.json(quote);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  const quote = await Quote.create({
+    ...req.body,
+    folio,
+    client_id: customerId || undefined
+  });
 
-// POST create quote — PRD §4A
-// When a quote is created for a customer, automatically seeds a Deal in the pipeline
-// so the sales funnel is always in sync with quoting activity.
-router.post('/', auth, async (req, res) => {
-  try {
-    // ── 1. Auto-generate folio ────────────────────────────────────────────────
-    const count = await Quote.countDocuments();
-    const year = new Date().getFullYear();
-    const folio = req.body.folio || `Q-${year}-${String(count + 1).padStart(3, '0')}`;
+  // ── Deal automático (PRD §3) ────────────────────────────────────────────────
+  if (customerId) {
+    const openStages = ['nuevo', 'contacto', 'propuesta', 'negociacion'];
+    let deal = await Deal.findOne({ client_id: customerId, stage: { $in: openStages } });
 
-    // ── 2. Resolve customer record ────────────────────────────────────────────
-    // The frontend sends `customer` as a string name. Try to find the DB record.
-    let customerId = req.body.client_id || null;
-    let customerName = req.body.customer || '';
-
-    if (!customerId && customerName) {
-      const found = await Customer.findOne({
-        name: { $regex: new RegExp(`^${customerName.trim()}$`, 'i') }
-      });
-      if (found) customerId = found._id;
-    }
-
-    // ── 3. Create the quote ───────────────────────────────────────────────────
-    const quote = await Quote.create({
-      ...req.body,
-      folio,
-      client_id: customerId || undefined,
-    });
-
-    // ── 4. Auto-create a Deal in the pipeline (PRD §3 — Deals.client_id) ─────
-    // Only create if the quote belongs to a known customer and there is no open
-    // deal already linked to that customer (avoids duplicates on repeat quotes).
-    if (customerId) {
-      const existingDeal = await Deal.findOne({
+    if (!deal) {
+      deal = await Deal.create({
+        company: customerName,
         client_id: customerId,
-        stage: { $in: ['nuevo', 'contacto', 'propuesta', 'negociacion'] }
+        value: quote.amount || 0,
+        stage: 'propuesta', // ya existe cotización -> arranca en propuesta
+        notes: `Deal creado automáticamente desde cotización ${folio}`
       });
-
-      if (!existingDeal) {
-        const newDeal = await Deal.create({
-          company: customerName,
-          client_id: customerId,
-          value: quote.amount || 0,
-          contact: '',
-          stage: 'propuesta',   // Quote exists → already in proposal stage
-          notes: `Deal creado automáticamente desde cotización ${folio}`,
-        });
-
-        // Back-link the quote to its deal
-        await Quote.findByIdAndUpdate(quote._id, { deal_id: newDeal._id });
-        quote.deal_id = newDeal._id;
-      } else {
-        // Link quote to the existing open deal
-        await Quote.findByIdAndUpdate(quote._id, { deal_id: existingDeal._id });
-        quote.deal_id = existingDeal._id;
-      }
     }
 
-    res.status(201).json(quote);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+    quote.deal_id = deal._id;
+    await quote.save();
   }
-});
 
-// PUT update quote
-router.put('/:id', auth, async (req, res) => {
-  try {
-    const quote = await Quote.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!quote) return res.status(404).json({ error: 'Cotización no encontrada' });
+  res.status(201).json(quote);
+}));
 
-    // ENVIAR WEBHOOK A N8N CUANDO LA COTIZACIÓN SE MARQUE COMO 'sent'
-    if (req.body.status === 'sent' || quote.status === 'sent') {
-       try {
-          let customerData = {};
-          if (quote.client_id) {
-            customerData = await Customer.findById(quote.client_id) || {};
-          } else if (quote.customer) {
-            customerData = await Customer.findOne({ name: quote.customer }) || {};
-          }
-          
-          fetch('https://n8n.diabolicalservices.tech/webhook/5d21680d-5fd7-45b8-bf2e-b2b9fd8d2b30', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  event: 'quote_sent',
-                  quote: quote,
-                  customer: customerData
-              })
-          }).catch(err => console.error('Error enviando webhook de cotización a n8n:', err));
-       } catch (webhookErr) {
-          console.error('Error procesando datos para webhook n8n:', webhookErr);
-       }
-    }
+// ─── PUT actualizar cotización ────────────────────────────────────────────────
+router.put('/:id', auth, asyncHandler(async (req, res) => {
+  const previous = await Quote.findById(req.params.id);
+  if (!previous) throw new NotFoundError('Cotización no encontrada');
 
-    res.json(quote);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  const wasSent = previous.status === 'sent';
+
+  Object.assign(previous, req.body);
+  await previous.save();
+  const quote = previous;
+
+  // Notificar a n8n solo en la TRANSICIÓN a 'sent'. Antes se disparaba en cada
+  // PUT mientras el estado fuera 'sent', así que editar una cotización ya
+  // enviada reenviaba el webhook y duplicaba el flujo en n8n.
+  if (!wasSent && quote.status === 'sent') {
+    const customer = quote.client_id
+      ? await Customer.findById(quote.client_id)
+      : await Customer.findOne({ name: quote.customer });
+
+    // dispatch() no lanza: un fallo del webhook no debe tumbar la respuesta.
+    dispatch('quote.sent', { quote, customer: customer || null });
   }
-});
 
-// DELETE quote
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    const quote = await Quote.findByIdAndDelete(req.params.id);
-    if (!quote) return res.status(404).json({ error: 'Cotización no encontrada' });
-    res.json({ message: 'Cotización eliminada' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  res.json(quote);
+}));
+
+// ─── DELETE cotización ────────────────────────────────────────────────────────
+router.delete('/:id', auth, asyncHandler(async (req, res) => {
+  const quote = await Quote.findByIdAndDelete(req.params.id);
+  if (!quote) throw new NotFoundError('Cotización no encontrada');
+  res.json({ message: 'Cotización eliminada', id: req.params.id });
+}));
 
 module.exports = router;

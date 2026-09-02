@@ -1,212 +1,152 @@
 const express = require('express');
 const Quote = require('../models/Quote');
 const Deal = require('../models/Deal');
-const Receivable = require('../models/Receivable');
 const Payable = require('../models/Payable');
-const auth = require('../middleware/auth');
-const verifyRole = require('../middleware/verifyRole');
+const Receivable = require('../models/Receivable');
+const asyncHandler = require('../utils/asyncHandler');
+const { DEAL_STAGES } = require('../config/constants');
+
+// Montado en index.js detrás de `auth` + `verifyRole('admin', 'finanzas')`.
+// Ambos endpoints exponen costos y márgenes, que el PRD §5 restringe a esos
+// dos roles. Antes el router estaba restringido pero un comentario afirmaba
+// "all roles", y cada handler repetía `auth`.
 const router = express.Router();
 
-// ─── GET /api/metrics ─────────────────────────────────────────────────────────
-// Backwards-compatible general metrics endpoint (all roles)
-router.get('/', auth, async (req, res) => {
-  try {
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - 6);
-    weekStart.setHours(0, 0, 0, 0);
+const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
-    // Daily sales labels (last 7 days)
-    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+/** Inicio del día, hace `daysAgo` días. */
+const startOfDaysAgo = (daysAgo) => {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
-    // ── MongoDB Aggregation Pipeline — PRD §4C ─────────────────────────────
-    const [salesAgg, costsAgg, funnelAgg] = await Promise.all([
-      // Daily sales grouped by date (accepted quotes this week)
-      Quote.aggregate([
-        { $match: { status: 'accepted', createdAt: { $gte: weekStart } } },
-        {
-          $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-            sales: { $sum: '$amount' }
-          }
-        },
-        { $sort: { _id: 1 } }
-      ]),
-      // Daily costs grouped by date (payables this week)
-      Payable.aggregate([
-        { $match: { createdAt: { $gte: weekStart } } },
-        {
-          $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-            costs: { $sum: '$amount' }
-          }
-        },
-        { $sort: { _id: 1 } }
-      ]),
-      // Deal funnel — count by stage
-      Deal.aggregate([
-        {
-          $group: {
-            _id: '$stage',
-            value: { $sum: 1 }
-          }
-        }
-      ])
+/** Agrupa una colección por día (YYYY-MM-DD) sumando un campo. */
+const dailyTotals = (model, match, field, as) =>
+  model.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+        [as]: { $sum: `$${field}` }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+/**
+ * Rellena la rejilla de los últimos 7 días cruzando ventas y costos.
+ * Las agregaciones solo devuelven días con movimiento; el gráfico necesita los 7.
+ */
+const buildWeeklyGrid = (salesAgg, costsAgg) => {
+  const salesByDay = new Map(salesAgg.map((s) => [s._id, s.sales]));
+  const costsByDay = new Map(costsAgg.map((c) => [c._id, c.costs]));
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = startOfDaysAgo(6 - i);
+    const key = d.toISOString().split('T')[0];
+    return {
+      name: DAY_LABELS[d.getDay()],
+      sales: salesByDay.get(key) || 0,
+      costs: costsByDay.get(key) || 0
+    };
+  });
+};
+
+/** Normaliza el embudo al orden de etapas del pipeline, incluyendo las vacías. */
+const buildFunnel = (funnelAgg) => {
+  const byStage = new Map(funnelAgg.map((f) => [f._id, f]));
+  return DEAL_STAGES.map((stage) => {
+    const entry = byStage.get(stage);
+    return {
+      name: stage.charAt(0).toUpperCase() + stage.slice(1),
+      count: entry?.count || 0,
+      value: entry?.value || 0
+    };
+  });
+};
+
+const sumTotal = (agg) => agg[0]?.total || 0;
+const pct = (part, whole) => (whole > 0 ? ((part / whole) * 100).toFixed(1) : '0');
+
+// ─── GET /api/metrics — gráficos semanales ────────────────────────────────────
+router.get('/', asyncHandler(async (req, res) => {
+  const weekStart = startOfDaysAgo(6);
+
+  const [salesAgg, costsAgg, funnelAgg] = await Promise.all([
+    dailyTotals(Quote, { status: 'accepted', createdAt: { $gte: weekStart } }, 'amount', 'sales'),
+    dailyTotals(Payable, { createdAt: { $gte: weekStart } }, 'amount', 'costs'),
+    Deal.aggregate([{ $group: { _id: '$stage', count: { $sum: 1 }, value: { $sum: '$value' } } }])
+  ]);
+
+  const weeklySales = buildWeeklyGrid(salesAgg, costsAgg);
+
+  res.json({
+    weeklySales,
+    funnel: buildFunnel(funnelAgg),
+    totalSales: weeklySales.reduce((acc, d) => acc + d.sales, 0),
+    totalCosts: weeklySales.reduce((acc, d) => acc + d.costs, 0)
+  });
+}));
+
+// ─── GET /api/metrics/executive-summary — PRD §4C ─────────────────────────────
+// Agregaciones acotadas por rango de fechas: nunca escanea la colección entera.
+router.get('/executive-summary', asyncHandler(async (req, res) => {
+  const now = new Date();
+  const weekStart = startOfDaysAgo(6);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const sumIn = (model, match) =>
+    model.aggregate([
+      { $match: match },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
     ]);
 
-    // Build last-7-days grid and merge aggregation results
-    const weeklySales = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateKey = d.toISOString().split('T')[0];
-      const dayLabel = days[d.getDay()];
+  const [
+    weekRevenueAgg, weekCostAgg,
+    monthRevenueAgg, monthCostAgg,
+    funnelAgg, salesAgg, costsAgg, pendingCxC
+  ] = await Promise.all([
+    sumIn(Quote,   { status: 'accepted', createdAt: { $gte: weekStart } }),
+    sumIn(Payable, { createdAt: { $gte: weekStart } }),
+    sumIn(Quote,   { status: 'accepted', createdAt: { $gte: monthStart } }),
+    sumIn(Payable, { createdAt: { $gte: monthStart } }),
+    Deal.aggregate([{ $group: { _id: '$stage', count: { $sum: 1 }, value: { $sum: '$value' } } }]),
+    dailyTotals(Quote, { status: 'accepted', createdAt: { $gte: weekStart } }, 'amount', 'sales'),
+    dailyTotals(Payable, { createdAt: { $gte: weekStart } }, 'amount', 'costs'),
+    Receivable.aggregate([
+      { $match: { status: { $in: ['pendiente', 'parcial', 'vencido'] } } },
+      { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$paid'] } } } }
+    ])
+  ]);
 
-      const saleEntry = salesAgg.find(s => s._id === dateKey);
-      const costEntry = costsAgg.find(c => c._id === dateKey);
+  const weekRevenue  = sumTotal(weekRevenueAgg);
+  const weekCosts    = sumTotal(weekCostAgg);
+  const monthRevenue = sumTotal(monthRevenueAgg);
+  const monthCosts   = sumTotal(monthCostAgg);
+  const weekMargin   = weekRevenue - weekCosts;
+  const monthMargin  = monthRevenue - monthCosts;
 
-      weeklySales.push({
-        name: dayLabel,
-        sales: saleEntry?.sales || 0,
-        costs: costEntry?.costs || 0
-      });
-    }
-
-    // Normalize funnel into ordered array matching pipeline stages
-    const stageOrder = ['nuevo', 'contacto', 'propuesta', 'negociacion', 'cierre'];
-    const funnel = stageOrder.map(s => {
-      const entry = funnelAgg.find(f => f._id === s);
-      return { name: s.charAt(0).toUpperCase() + s.slice(1), value: entry?.value || 0 };
-    });
-
-    const totalSales = weeklySales.reduce((acc, d) => acc + d.sales, 0);
-    const totalCosts = weeklySales.reduce((acc, d) => acc + d.costs, 0);
-
-    res.json({ weeklySales, funnel, totalSales, totalCosts });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ─── GET /api/metrics/executive-summary — PRD §4C (Finance/Admin only) ────────
-// Optimized aggregation with date-range scoping — never full-collection scans
-router.get('/executive-summary', auth, verifyRole('admin', 'finanzas'), async (req, res) => {
-  try {
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - 6);
-    weekStart.setHours(0, 0, 0, 0);
-
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const [
-      weekRevenueAgg,
-      weekCostAgg,
-      monthRevenueAgg,
-      monthCostAgg,
-      funnelAgg,
-      weeklySalesAgg,
-      weeklyCostsAgg,
-      pendingCxC,
-    ] = await Promise.all([
-      // Weekly revenue
-      Quote.aggregate([
-        { $match: { status: 'accepted', createdAt: { $gte: weekStart } } },
-        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
-      ]),
-      // Weekly costs
-      Payable.aggregate([
-        { $match: { createdAt: { $gte: weekStart } } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]),
-      // Monthly revenue
-      Quote.aggregate([
-        { $match: { status: 'accepted', createdAt: { $gte: monthStart } } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]),
-      // Monthly costs
-      Payable.aggregate([
-        { $match: { createdAt: { $gte: monthStart } } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]),
-      // Funnel counts
-      Deal.aggregate([
-        { $group: { _id: '$stage', count: { $sum: 1 }, value: { $sum: '$value' } } }
-      ]),
-      // Daily sales for chart
-      Quote.aggregate([
-        { $match: { status: 'accepted', createdAt: { $gte: weekStart } } },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, sales: { $sum: '$amount' } } },
-        { $sort: { _id: 1 } }
-      ]),
-      // Daily costs for chart
-      Payable.aggregate([
-        { $match: { createdAt: { $gte: weekStart } } },
-        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, costs: { $sum: '$amount' } } },
-        { $sort: { _id: 1 } }
-      ]),
-      // Total pending CxC (accounts receivable)
-      Receivable.aggregate([
-        { $match: { status: { $in: ['pendiente', 'parcial'] } } },
-        { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$paid'] } } } }
-      ]),
-    ]);
-
-    const weekRevenue = weekRevenueAgg[0]?.total || 0;
-    const weekCosts = weekCostAgg[0]?.total || 0;
-    const monthRevenue = monthRevenueAgg[0]?.total || 0;
-    const monthCosts = monthCostAgg[0]?.total || 0;
-    const grossMarginWeek = weekRevenue - weekCosts;
-    const grossMarginMonth = monthRevenue - monthCosts;
-    const pendingReceivables = pendingCxC[0]?.total || 0;
-
-    // Build 7-day chart data
-    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const weeklySales = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateKey = d.toISOString().split('T')[0];
-      weeklySales.push({
-        name: days[d.getDay()],
-        sales: weeklySalesAgg.find(s => s._id === dateKey)?.sales || 0,
-        costs: weeklyCostsAgg.find(c => c._id === dateKey)?.costs || 0,
-      });
-    }
-
-    // Funnel array
-    const stageOrder = ['nuevo', 'contacto', 'propuesta', 'negociacion', 'cierre'];
-    const funnel = stageOrder.map(s => {
-      const entry = funnelAgg.find(f => f._id === s);
-      return {
-        name: s.charAt(0).toUpperCase() + s.slice(1),
-        count: entry?.count || 0,
-        value: entry?.value || 0
-      };
-    });
-
-    res.json({
-      week: {
-        revenue: weekRevenue,
-        costs: weekCosts,
-        grossMargin: grossMarginWeek,
-        marginPct: weekRevenue > 0 ? ((grossMarginWeek / weekRevenue) * 100).toFixed(1) : '0',
-        roi: weekCosts > 0 ? ((grossMarginWeek / weekCosts) * 100).toFixed(1) : '0',
-        dealsWon: weekRevenueAgg[0]?.count || 0,
-      },
-      month: {
-        revenue: monthRevenue,
-        costs: monthCosts,
-        grossMargin: grossMarginMonth,
-        marginPct: monthRevenue > 0 ? ((grossMarginMonth / monthRevenue) * 100).toFixed(1) : '0',
-      },
-      pendingReceivables,
-      weeklySales,
-      funnel,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  res.json({
+    week: {
+      revenue: weekRevenue,
+      costs: weekCosts,
+      grossMargin: weekMargin,
+      marginPct: pct(weekMargin, weekRevenue),
+      roi: pct(weekMargin, weekCosts),
+      dealsWon: weekRevenueAgg[0]?.count || 0
+    },
+    month: {
+      revenue: monthRevenue,
+      costs: monthCosts,
+      grossMargin: monthMargin,
+      marginPct: pct(monthMargin, monthRevenue)
+    },
+    pendingReceivables: sumTotal(pendingCxC),
+    weeklySales: buildWeeklyGrid(salesAgg, costsAgg),
+    funnel: buildFunnel(funnelAgg)
+  });
+}));
 
 module.exports = router;
