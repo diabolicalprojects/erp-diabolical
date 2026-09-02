@@ -1,0 +1,152 @@
+/* ============================================================================
+   TOKENS DE DISEÑO — DIABOLICAL ERP
+   ============================================================================
+
+   Dos escalas con propósitos distintos:
+
+   1. MARCA (monocromática). La identidad de Diabolical es blanco sobre negro,
+      y se invierte en tema claro. Aquí no hay color.
+
+   2. ESTADO (cromática). Verde / ámbar / rojo. NO se invierten con el tema:
+      "vencido" debe leerse como rojo en ambos modos.
+
+   El problema que resuelve este archivo: antes `--success`, `--warning` y
+   `--error` valían todos `#ffffff`. Un botón de borrar, la utilidad del mes y
+   los costos operativos se pintaban exactamente igual que el texto normal, así
+   que la interfaz no comunicaba ningún estado. Al mismo tiempo, las clases
+   `.status-badge` sí usaban verde/ámbar/rojo con hex fijos — dos sistemas de
+   color compitiendo. Aquí quedan unificados.
+   ========================================================================== */
+
+:root {
+    /* ── Superficies ──────────────────────────────────────────────────────── */
+    --bg-base: #000000;
+    --bg-card: #0a0a0a;
+    --bg-sidebar: #050505;
+    --bg-elevated: #121212;
+
+    /* ── Texto ────────────────────────────────────────────────────────────── */
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a0;
+    --text-muted: #6b6b6b;
+    --text-inverse: #000000;
+
+    /* ── Bordes y veladuras ───────────────────────────────────────────────── */
+    --border-color: #222222;
+    --glass: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-strong: rgba(255, 255, 255, 0.12);
+
+    /* ── Acento de marca (monocromático a propósito) ──────────────────────── */
+    --accent: #ffffff;
+    --accent-soft: #e6e6e6;
+    --accent-deep: #1a1a1a;
+    --accent-contrast: #000000; /* texto sobre --accent */
+
+    /* ── Estado (cromático, idéntico en ambos temas) ──────────────────────── */
+    --success: #10b981;
+    --success-bg: rgba(16, 185, 129, 0.12);
+    --warning: #f59e0b;
+    --warning-bg: rgba(245, 158, 11, 0.12);
+    --danger: #ef4444;
+    --danger-bg: rgba(239, 68, 68, 0.12);
+    --info: #60a5fa;
+    --info-bg: rgba(96, 165, 250, 0.12);
+    --neutral: var(--text-secondary);
+    --neutral-bg: var(--glass);
+
+    /* ── Escala de espaciado ──────────────────────────────────────────────── */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 2.5rem;
+
+    /* ── Radios ───────────────────────────────────────────────────────────── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 999px;
+
+    /* ── Tipografía ───────────────────────────────────────────────────────── */
+    --text-xs: 0.7rem;
+    --text-sm: 0.8rem;
+    --text-base: 0.9rem;
+    --text-md: 1rem;
+    --text-lg: 1.2rem;
+
+    /* ── Movimiento ───────────────────────────────────────────────────────── */
+    --transition-fast: 0.15s ease;
+    --transition-base: 0.25s ease;
+
+    /* ── Estructura ───────────────────────────────────────────────────────── */
+    --sidebar-width: 280px;
+
+    /* ── Capas (z-index) ──────────────────────────────────────────────────────
+       Centralizadas porque estaban repartidas como números sueltos entre 950 y
+       9999 en los estilos inline, y el modal a veces quedaba bajo la barra. */
+    --z-sidebar: 1000;
+    --z-overlay: 1900;
+    --z-modal: 2000;
+    --z-mobile-btn: 2100;
+    --z-splash: 9000;
+
+    /* ── Alias heredados ──────────────────────────────────────────────────────
+       Los 15 componentes aún sin migrar referencian estos nombres. Se mantienen
+       apuntando a los nuevos tokens para no romperlos; retirar cuando la
+       migración termine. */
+    --bg-black: var(--bg-base);
+    --purple-main: var(--accent);
+    --purple-light: var(--accent-soft);
+    --violet-deep: var(--accent-deep);
+    --error: var(--danger);
+}
+
+[data-theme='light'] {
+    --bg-base: #ffffff;
+    --bg-card: #f7f7f7;
+    --bg-sidebar: #ffffff;
+    --bg-elevated: #ffffff;
+
+    --text-primary: #000000;
+    --text-secondary: #555555;
+    --text-muted: #8a8a8a;
+    --text-inverse: #ffffff;
+
+    --border-color: #e2e2e2;
+    --glass: rgba(0, 0, 0, 0.04);
+    --glass-border: rgba(0, 0, 0, 0.12);
+    --glass-strong: rgba(0, 0, 0, 0.1);
+
+    --accent: #000000;
+    --accent-soft: #333333;
+    --accent-deep: #e6e6e6;
+    --accent-contrast: #ffffff;
+
+    /* Tonos de estado ligeramente más oscuros: los del tema oscuro no alcanzan
+       contraste AA sobre fondo blanco. */
+    --success: #047857;
+    --success-bg: rgba(4, 120, 87, 0.1);
+    --warning: #b45309;
+    --warning-bg: rgba(180, 83, 9, 0.1);
+    --danger: #b91c1c;
+    --danger-bg: rgba(185, 28, 28, 0.1);
+    --info: #1d4ed8;
+    --info-bg: rgba(29, 78, 216, 0.1);
+}
+
+/* Respeta la preferencia del sistema de reducir movimiento. El splash y las
+   transiciones de framer-motion podían resultar molestos sin esta regla. */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

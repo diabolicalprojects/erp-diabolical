@@ -1,108 +1,207 @@
-import React, { useState } from 'react';
-import { Shield, UserCheck, Lock, Users, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Shield, UserCheck, Lock, AlertCircle } from 'lucide-react';
+import { rolesAPI } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import ModuleTutorial from '../Common/ModuleTutorial';
+import { PageHeader, Badge, EmptyState } from '../ui';
+import Spinner from '../ui/Spinner';
+
+/**
+ * Roles y permisos.
+ *
+ * Este módulo era una maqueta: mantenía su propia copia de la tabla de permisos
+ * (que ya vivía en el backend y podía divergir), y al pulsar una tarjeta de rol
+ * llamaba a `setUserRole`, que en el contexto era `() => {}` — no ocurría nada.
+ * Nunca tocó `rolesAPI`, que sí existía.
+ *
+ * Ahora lee roles, permisos y usuarios de `GET /api/roles` y asigna el rol real
+ * con `PUT /api/roles/:id`.
+ */
+
+const ROLE_META: Record<string, { name: string; desc: string }> = {
+  admin: {
+    name: 'Administrador',
+    desc: 'Acceso total a todos los módulos y a la configuración global.'
+  },
+  vendedor: {
+    name: 'Vendedor',
+    desc: 'Pipeline, Clientes y Cotizaciones. Sin acceso a Finanzas ni Inventario.'
+  },
+  almacen: {
+    name: 'Almacén',
+    desc: 'Inventario y Compras: recepción de mercancía y catálogo.'
+  },
+  finanzas: {
+    name: 'Finanzas',
+    desc: 'CxC, CxP, Métricas y reportes de rentabilidad.'
+  }
+};
+
+const TUTORIAL_STEPS = [
+  'Selecciona un rol para ver los módulos que habilita.',
+  'Cambia el rol de un usuario desde la lista de la derecha.',
+  'Los permisos los aplica el backend: cambiarlos aquí surte efecto de inmediato.',
+  'Un administrador no puede quitarse el rol si es el único que queda.'
+];
 
 const Roles = () => {
-    const { userRole, setUserRole } = useApp();
+  const { user: currentUser } = useApp();
 
-    const tutorialSteps = [
-        "Selecciona un rol en el panel de la izquierda para ver sus privilegios.",
-        "Los cambios en el rol activo se reflejan instantáneamente en el Dashboard.",
-        "Los permisos definen qué partes del sistema son visibles para cada perfil.",
-        "Usa estos perfiles para delegar funciones a tus equipos de trabajo."
-    ];
+  const [roles, setRoles] = useState<string[]>([]);
+  const [permissions, setPermissions] = useState<Record<string, string[]>>({});
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
-    const roles = [
-        { id: 'admin', name: 'Administrador', desc: 'Acceso total a todos los módulos y configuración global del sistema.', color: '#ef4444' },
-        { id: 'vendedor', name: 'Vendedor', desc: 'Acceso a CRM, Clientes y Cotizaciones. Restringido en Finanzas e Inventario.', color: '#7c3aed' },
-        { id: 'almacen', name: 'Almacén', desc: 'Gestión de Inventario, Recepción de mercancía y Catálogo de productos.', color: '#10b981' },
-        { id: 'finanzas', name: 'Finanzas', desc: 'Acceso a CxC, CxP, Métricas y Reportes de rentabilidad.', color: '#f59e0b' }
-    ];
+  useEffect(() => {
+    let cancelled = false;
 
-    const permissions = {
-        admin: ['CRM', 'Clientes', 'Cotizaciones', 'Inventario', 'Compras', 'CxC', 'CxP', 'Métricas', 'Ajustes'],
-        vendedor: ['CRM', 'Clientes', 'Cotizaciones'],
-        almacen: ['Inventario', 'Compras'],
-        finanzas: ['CxC', 'CxP', 'Métricas', 'Clientes']
-    };
+    rolesAPI.get()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setRoles(data.roles || []);
+        setPermissions(data.permissions || {});
+        setUsers(data.users || []);
+        setSelectedRole(data.roles?.[0] ?? null);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err?.response?.data?.error || 'No se pudieron cargar los roles');
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
 
-    return (
-        <div className="animate-fade">
-            <header className="page-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div>
-                        <h1>Roles y Permisos</h1>
-                        <p className="subtitle">Gestión de acceso por perfil de usuario</p>
-                    </div>
-                    <ModuleTutorial
-                        title="Roles"
-                        description="Configura la seguridad y visibilidad de los módulos del ERP."
-                        steps={tutorialSteps}
-                    />
-                </div>
-            </header>
+    // Evita actualizar estado si el módulo se desmonta antes de que llegue la
+    // respuesta — provocaba una advertencia de React al navegar rápido.
+    return () => { cancelled = true; };
+  }, []);
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {roles.map(r => (
-                        <div
-                            key={r.id}
-                            className={`glass-card ${userRole === r.id ? 'active' : ''}`}
-                            style={{
-                                cursor: 'pointer',
-                                borderLeft: userRole === r.id ? `4px solid ${r.color}` : '1px solid var(--glass-border)',
-                                transition: 'all 0.2s'
-                            }}
-                            onClick={() => setUserRole(r.id)}
-                        >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <h4 style={{ color: userRole === r.id ? r.color : 'inherit' }}>{r.name}</h4>
-                                {userRole === r.id && <Shield size={16} color={r.color} />}
-                            </div>
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.desc}</p>
-                        </div>
-                    ))}
-                </div>
+  const changeUserRole = async (userId: string, role: string) => {
+    setSavingId(userId);
+    setError(null);
+    try {
+      const { data } = await rolesAPI.updateRole(userId, role);
+      setUsers((prev) => prev.map((u) => (u._id === userId ? data : u)));
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo cambiar el rol');
+    } finally {
+      setSavingId(null);
+    }
+  };
 
-                <div className="glass-card">
-                    <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Lock size={20} color="var(--purple-main)" /> Módulos habilitados para {roles.find(r => r.id === userRole)?.name}
-                    </h3>
+  if (loading) return <Spinner fullscreen />;
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
-                        {permissions[userRole].map(p => (
-                            <div
-                                key={p}
-                                style={{
-                                    padding: '1rem',
-                                    background: 'var(--glass)',
-                                    borderRadius: '12px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '10px',
-                                    border: '1px solid var(--glass-border)'
-                                }}
-                            >
-                                <UserCheck size={16} color="var(--success)" />
-                                <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{p}</span>
-                            </div>
-                        ))}
-                    </div>
+  return (
+    <div className="animate-fade">
+      <PageHeader
+        title="Roles y permisos"
+        subtitle="Gestión de acceso por perfil de usuario"
+        aside={
+          <ModuleTutorial
+            title="Roles"
+            description="Configura la seguridad y visibilidad de los módulos del ERP."
+            steps={TUTORIAL_STEPS}
+          />
+        }
+      />
 
-                    <div style={{ marginTop: '2.5rem', padding: '1.5rem', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '16px', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'flex', gap: '1rem' }}>
-                        <AlertCircle color="#f59e0b" size={24} />
-                        <div>
-                            <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f59e0b' }}>Zona de Seguridad</p>
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                Los cambios en los permisos afectan el acceso en tiempo real de todos los usuarios vinculados a este perfil.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      {error && (
+        <div className="alert alert--danger">
+          <AlertCircle size={18} />
+          <span>{error}</span>
         </div>
-    );
+      )}
+
+      <div className="roles-grid">
+        {/* ── Catálogo de roles ────────────────────────────────────────────── */}
+        <div className="stack">
+          {roles.map((roleId) => {
+            const meta = ROLE_META[roleId] ?? { name: roleId, desc: '' };
+            const isSelected = selectedRole === roleId;
+            return (
+              <button
+                key={roleId}
+                type="button"
+                className={`glass-card role-card${isSelected ? ' is-selected' : ''}`}
+                onClick={() => setSelectedRole(roleId)}
+                aria-pressed={isSelected}
+              >
+                <div className="tile-head">
+                  <h4>{meta.name}</h4>
+                  {isSelected && <Shield size={16} />}
+                </div>
+                <p className="subtitle">{meta.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Módulos del rol seleccionado + usuarios ──────────────────────── */}
+        <div className="stack">
+          <section className="glass-card">
+            <h3 className="section-title">
+              <Lock size={20} />
+              Módulos de {ROLE_META[selectedRole ?? '']?.name ?? '—'}
+            </h3>
+
+            <div className="permission-grid">
+              {(permissions[selectedRole ?? ''] ?? []).map((moduleName) => (
+                <div key={moduleName} className="permission-chip">
+                  <UserCheck size={16} />
+                  <span>{moduleName}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="glass-card">
+            <h3 className="section-title">Usuarios</h3>
+
+            {users.length === 0 ? (
+              <EmptyState title="Sin usuarios" description="Aún no hay cuentas registradas." />
+            ) : (
+              <div className="data-table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Email</th>
+                      <th>Rol</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u._id}>
+                        <td>
+                          {u.name}
+                          {u._id === currentUser?.id && <Badge tone="info">tú</Badge>}
+                        </td>
+                        <td className="cell-muted">{u.email}</td>
+                        <td>
+                          <select
+                            className="field-input"
+                            value={u.role}
+                            disabled={savingId === u._id}
+                            onChange={(e) => changeUserRole(u._id, e.target.value)}
+                          >
+                            {roles.map((r) => (
+                              <option key={r} value={r}>{ROLE_META[r]?.name ?? r}</option>
+                            ))}
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default Roles;
