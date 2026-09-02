@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, AlertTriangle, Trophy, Trash2 } from 'lucide-react';
+import { Plus, AlertTriangle, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { dealsAPI } from '../../services/api';
 import ModuleTutorial from '../Common/ModuleTutorial';
@@ -17,7 +17,7 @@ const STAGES = [
 const TUTORIAL_STEPS = [
   'Arrastra las tarjetas entre columnas, o usa el selector de etapa de cada una.',
   "Pasar a 'Propuesta' exige una cotización en Borrador vinculada al trato.",
-  "Al mover a 'Cierre' se dispara la cadena: cliente → cotización → CxC → n8n.",
+  "Al mover a 'Cierre' el cliente pasa a Activo y se genera su cuenta por cobrar.",
   'El cierre pide confirmación porque no se puede deshacer.'
 ];
 
@@ -228,43 +228,20 @@ const Pipeline = () => {
         </div>
       </Modal>
 
-      {/* ── Confirmación de cierre (PRD §4B) ──────────────────────────────── */}
-      <Modal
+      <ConfirmDialog
         isOpen={!!closureConfirm}
-        onClose={() => setClosureConfirm(null)}
         title="Cerrar trato"
-        width="440px"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setClosureConfirm(null)}>Cancelar</Button>
-            <Button
-              onClick={() => {
-                const { deal, fromStage } = closureConfirm;
-                setClosureConfirm(null);
-                changeStage(deal, fromStage, 'cierre');
-              }}
-            >
-              Confirmar cierre
-            </Button>
-          </>
+        message={
+          <>Vas a marcar <strong>{closureConfirm?.deal.company}</strong> como cerrado. Esta acción no se puede deshacer.</>
         }
-      >
-        {closureConfirm && (
-          <div className="closure-confirm">
-            <Trophy size={40} />
-            <p>
-              Vas a marcar <strong>{closureConfirm.deal.company}</strong> como cerrado.
-              Esto encadena cuatro acciones automáticas:
-            </p>
-            <ul className="plain">
-              <li className="done">El cliente pasa a <strong>Activo</strong></li>
-              <li className="done">La cotización en Borrador se marca <strong>Aprobada</strong></li>
-              <li className="done">Se genera la <strong>cuenta por cobrar</strong> en Finanzas</li>
-              <li className="done">Se notifica a <strong>n8n</strong> para el onboarding</li>
-            </ul>
-          </div>
-        )}
-      </Modal>
+        confirmLabel="Confirmar cierre"
+        onConfirm={() => {
+          const { deal, fromStage } = closureConfirm;
+          setClosureConfirm(null);
+          changeStage(deal, fromStage, 'cierre');
+        }}
+        onCancel={() => setClosureConfirm(null)}
+      />
 
       <ConfirmDialog
         isOpen={!!pendingDelete}

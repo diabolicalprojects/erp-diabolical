@@ -14,7 +14,7 @@ const TUTORIAL_STEPS = [
   "'Rápida' arma la propuesta desde tu catálogo de productos y servicios.",
   "'Personalizada' te deja definir cada ítem a mano, con precios y descuentos.",
   'Previsualiza para revisar el documento y descargarlo en PDF.',
-  'Al enviar, la cotización pasa a Enviada y se notifica al flujo de n8n.',
+  'Al enviar, la cotización pasa a Enviada y queda lista para el cliente.',
   'El engranaje configura la plantilla: datos fiscales, banco y condiciones.'
 ];
 

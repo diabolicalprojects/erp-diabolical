@@ -1324,32 +1324,6 @@ input:-webkit-autofill:focus {
     border: 0;
 }
 
-.closure-confirm {
-    text-align: center;
-    color: var(--text-secondary);
-}
-
-.closure-confirm svg {
-    color: var(--text-primary);
-    margin-bottom: var(--space-3);
-}
-
-.closure-confirm p {
-    margin-bottom: var(--space-4);
-}
-
-.closure-confirm strong {
-    color: var(--text-primary);
-}
-
-.closure-confirm ul {
-    text-align: left;
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-3) var(--space-4);
-}
-
 /* ── Métricas ──────────────────────────────────────────────────────────── */
 .metrics-page {
     max-width: 1200px;
