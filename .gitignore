@@ -1,8 +1,22 @@
-node_modules
-dist
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Entorno — nunca commitear secretos (usar los .env.example)
 .env
+.env.*
+!.env.example
+
+# Logs
 *.log
+npm-debug.log*
+
+# Sistema operativo / editor
 .DS_Store
-frontend/node_modules
-frontend/dist
-backend/node_modules
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
