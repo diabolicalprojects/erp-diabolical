@@ -1,385 +1,302 @@
-import React, { useState } from 'react';
-import { X, Save, ShoppingBag, Plus, Trash2, Box, Briefcase, Zap, ClipboardList } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useMemo, useState } from 'react';
+import { Zap, Plus, Trash2, Box, Briefcase, Users, ArrowLeft, Minus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { Modal, Field, Button, Tabs, EmptyState, Badge } from '../ui';
+import { currency } from '../../lib/format';
 
-const QuoteWizard = ({ isOpen, onClose }) => {
-    const { customers, addCustomer, inventory, services, quotePresets, setQuotes, quotes, addQuote } = useApp();
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
-    const [showNewCustomer, setShowNewCustomer] = useState(false);
-    const [step, setStep] = useState(1);
-    const [activeTab, setActiveTab] = useState('products'); // 'products', 'services', 'presets'
-    const [formData, setFormData] = useState({
-        customer: '',
-        items: [],
-        status: 'sent'
+interface QuoteWizardProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const EMPTY_CUSTOMER = { name: '', email: '', phone: '' };
+
+/**
+ * Asistente de cotización rápida: elige cliente, arma la propuesta desde el
+ * catálogo y guarda.
+ */
+const QuoteWizard = ({ isOpen, onClose }: QuoteWizardProps) => {
+  const { customers, addCustomer, inventory, services, addQuote } = useApp();
+
+  const [step, setStep] = useState(1);
+  const [tab, setTab] = useState('products');
+  const [customer, setCustomer] = useState('');
+  const [items, setItems] = useState<any[]>([]);
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState(EMPTY_CUSTOMER);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const products = useMemo(
+    () => (inventory || []).filter((i: any) => i.type !== 'service'),
+    [inventory]
+  );
+
+  const total = useMemo(
+    () => items.reduce((acc, i) => acc + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0),
+    [items]
+  );
+
+  const reset = () => {
+    setStep(1);
+    setTab('products');
+    setCustomer('');
+    setItems([]);
+    setShowNewCustomer(false);
+    setNewCustomer(EMPTY_CUSTOMER);
+    setError(null);
+  };
+
+  const close = () => { reset(); onClose(); };
+
+  const addItem = (source: any) => {
+    setItems((prev) => {
+      // Volver a pulsar un artículo ya añadido incrementaba la lista con una
+      // segunda línea idéntica en vez de subir la cantidad.
+      const existing = prev.findIndex((i) => i._id === source._id);
+      if (existing >= 0) {
+        return prev.map((i, idx) => (idx === existing ? { ...i, quantity: i.quantity + 1 } : i));
+      }
+      return [...prev, { ...source, quantity: 1, type: source.type || 'product' }];
     });
+  };
 
-    const handleAddItem = (item, type) => {
-        setFormData({
-            ...formData,
-            items: [...formData.items, { ...item, quantity: 1, type }]
-        });
-    };
-
-    const handleRemoveItem = (index) => {
-        const newItems = [...formData.items];
-        newItems.splice(index, 1);
-        setFormData({ ...formData, items: newItems });
-    };
-
-    const handleApplyPreset = (preset) => {
-        setFormData({
-            ...formData,
-            items: [...formData.items, ...preset.items]
-        });
-    };
-
-    const calculateTotal = () => {
-        return formData.items.reduce((acc, item) => acc + (item.price * (item.quantity || 1)), 0);
-    };
-
-    const handleFinish = async () => {
-        setIsSubmitting(true);
-        try {
-            const newQuote = {
-                customer: formData.customer,
-                items: formData.items.map(item => ({
-                    name: item.name,
-                    price: Number(item.price) || 0,
-                    quantity: Number(item.quantity) || 1,
-                    type: item.type || 'product',
-                    description: item.description || '',
-                    discount: Number(item.discount) || 0
-                })),
-                amount: calculateTotal(),
-                date: new Date().toISOString(),
-                status: 'sent',
-                type: 'quick'
-            };
-            
-            await addQuote(newQuote);
-            
-            onClose();
-            setStep(1);
-            setFormData({ customer: '', items: [], status: 'sent' });
-        } catch (error) {
-            console.error("Error creating quote:", error);
-            alert('Error al guardar la cotización. Revisa que el cliente esté seleccionado y los items sean válidos.');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleCreateCustomer = async () => {
-        if (!newCustomer.name) return;
-        setIsSubmitting(true);
-        try {
-            await addCustomer({ ...newCustomer, status: 'potencial' });
-            setFormData({ ...formData, customer: newCustomer.name });
-            setShowNewCustomer(false);
-            setNewCustomer({ name: '', email: '', phone: '' });
-        } catch (error) {
-            console.error("Error creating customer:", error);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="modal-overlay modal-center" onClick={onClose} style={{ zIndex: 9999 }}>
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 30 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 30 }}
-                className="glass-card quote-wizard-container"
-                style={{
-                    maxWidth: '900px',
-                    width: '95%',
-                    padding: '2rem',
-                    maxHeight: '90vh',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--glass-border)'
-                }}
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <div>
-                        <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <Zap size={24} style={{ color: 'var(--text-primary)' }} />
-                            {step === 1 ? 'Identificar Cliente' : 'Armar Propuesta Comercial'}
-                        </h2>
-                        <p className="subtitle">Estructura tu cotización paso a paso</p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                            <div style={{ width: '40px', height: '4px', background: 'var(--text-primary)', borderRadius: '2px' }}></div>
-                            <div style={{ width: '40px', height: '4px', background: step === 2 ? 'var(--text-primary)' : 'var(--glass-border)', borderRadius: '2px' }}></div>
-                        </div>
-                        <button className="icon-btn" onClick={onClose}><X /></button>
-                    </div>
-                </div>
-
-                {step === 1 ? (
-                    /* STEP 1: CUSTOMER SELECTION */
-                    <div style={{ flex: 1, overflowY: 'auto' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-                            {customers.map(c => (
-                                <button
-                                    key={c._id || c.id}
-                                    className={`glass-card item-card ${formData.customer === c.name ? 'selected' : ''}`}
-                                    style={{
-                                        textAlign: 'left',
-                                        padding: '1.2rem',
-                                        cursor: 'pointer',
-                                        background: formData.customer === c.name ? 'var(--text-primary)' : 'var(--glass)',
-                                        border: formData.customer === c.name ? '2px solid var(--text-primary)' : '1px solid var(--glass-border)',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                    onClick={() => { setFormData({ ...formData, customer: c.name }); setShowNewCustomer(false); }}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                        <h4 style={{ margin: 0, color: formData.customer === c.name ? 'var(--bg-black)' : 'var(--text-primary)', fontWeight: 700 }}>{c.name}</h4>
-                                        <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid var(--bg-black)', background: formData.customer === c.name ? 'var(--text-primary)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {formData.customer === c.name && <div style={{ width: '6px', height: '6px', background: 'var(--bg-black)', borderRadius: '50%' }} />}
-                                        </div>
-                                    </div>
-                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', opacity: 1, margin: 0, fontWeight: 500 }}>{c.email}</p>
-                                </button>
-                            ))}
-                            <button
-                                className={`glass-card item-card ${showNewCustomer ? 'selected' : ''}`}
-                                style={{
-                                    textAlign: 'left',
-                                    padding: '1.2rem',
-                                    cursor: 'pointer',
-                                    background: showNewCustomer ? 'var(--text-primary)' : 'var(--glass)',
-                                    border: showNewCustomer ? '2px solid var(--text-primary)' : '1px dashed var(--glass-border)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'all 0.2s ease',
-                                    color: showNewCustomer ? 'var(--bg-black)' : 'var(--text-primary)'
-                                }}
-                                onClick={() => { setShowNewCustomer(true); setFormData({ ...formData, customer: '' }); }}
-                            >
-                                <Plus size={24} style={{ marginBottom: '8px' }} />
-                                <h4 style={{ margin: 0, fontWeight: 700 }}>Otro Cliente (Nuevo)</h4>
-                            </button>
-                        </div>
-
-                        <AnimatePresence>
-                            {showNewCustomer && (
-                                <motion.div 
-                                    initial={{ opacity: 0, height: 0 }} 
-                                    animate={{ opacity: 1, height: 'auto' }} 
-                                    exit={{ opacity: 0, height: 0 }}
-                                    style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}
-                                >
-                                    <h4 style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>Datos del Nuevo Cliente</h4>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Nombre / Razón Social *</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-input" 
-                                                value={newCustomer.name} 
-                                                onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} 
-                                                placeholder="Ej. Empresa SA de CV"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Email</label>
-                                            <input 
-                                                type="email" 
-                                                className="form-input" 
-                                                value={newCustomer.email} 
-                                                onChange={e => setNewCustomer({...newCustomer, email: e.target.value})} 
-                                                placeholder="Ej. contacto@empresa.com"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                        <button 
-                                            className="btn-primary" 
-                                            onClick={handleCreateCustomer}
-                                            disabled={!newCustomer.name || isSubmitting}
-                                        >
-                                            {isSubmitting ? 'Guardando...' : 'Guardar y Seleccionar Cliente'}
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        <div style={{ marginTop: '2.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                                className="btn-primary"
-                                disabled={!formData.customer || isSubmitting}
-                                onClick={() => setStep(2)}
-                                style={{ padding: '0.8rem 2.5rem' }}
-                            >
-                                Configurar Conceptos <Save size={18} style={{ marginLeft: '10px' }} />
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    /* STEP 2: ITEMS SELECTION */
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', flex: 1, overflow: 'hidden' }}>
-
-                        {/* LEFT: Catalog Selection */}
-                        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <div className="tab-switcher" style={{ display: 'flex', gap: '4px', background: 'var(--bg-black)', padding: '4px', borderRadius: '12px', marginBottom: '1.5rem' }}>
-                                <button
-                                    className={`tab-btn ${activeTab === 'products' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('products')}
-                                    style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: activeTab === 'products' ? 'var(--text-primary)' : 'transparent', color: activeTab === 'products' ? 'var(--bg-black)' : 'var(--text-secondary)' }}
-                                >
-                                    <Box size={16} /> Productos
-                                </button>
-                                <button
-                                    className={`tab-btn ${activeTab === 'services' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('services')}
-                                    style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: activeTab === 'services' ? 'var(--text-primary)' : 'transparent', color: activeTab === 'services' ? 'var(--bg-black)' : 'var(--text-secondary)' }}
-                                >
-                                    <Briefcase size={16} /> Servicios
-                                </button>
-                                <button
-                                    className={`tab-btn ${activeTab === 'presets' ? 'active' : ''}`}
-                                    onClick={() => setActiveTab('presets')}
-                                    style={{ flex: 1, padding: '0.6rem', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: activeTab === 'presets' ? 'var(--text-primary)' : 'transparent', color: activeTab === 'presets' ? 'var(--bg-black)' : 'var(--text-secondary)' }}
-                                >
-                                    <ClipboardList size={16} /> Presets
-                                </button>
-                            </div>
-
-                            <div className="catalog-scroll" style={{ flex: 1, overflowY: 'auto', paddingRight: '10px' }}>
-                                <AnimatePresence mode="wait">
-                                    {activeTab === 'products' && (
-                                        <motion.div key="prod" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
-                                            {inventory.map(item => (
-                                                <div key={item.id} className="catalog-item glass-card" style={{ padding: '1rem', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div>
-                                                        <p style={{ fontWeight: 700, margin: 0 }}>{item.name}</p>
-                                                        <p style={{ fontSize: '0.8rem', opacity: 0.5, margin: '2px 0 0 0' }}>Stock: {item.stock} | ${item.price.toLocaleString()}</p>
-                                                    </div>
-                                                    <button className="icon-btn purple" onClick={() => handleAddItem(item, 'product')}><Plus size={16} /></button>
-                                                </div>
-                                            ))}
-                                        </motion.div>
-                                    )}
-                                    {activeTab === 'services' && (
-                                        <motion.div key="serv" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
-                                            {services.map(item => (
-                                                <div key={item.id} className="catalog-item glass-card" style={{ padding: '1rem', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div>
-                                                        <p style={{ fontWeight: 700, margin: 0 }}>{item.name}</p>
-                                                        <p style={{ fontSize: '0.8rem', opacity: 0.5, margin: '2px 0 0 0' }}>{item.description} | ${item.price.toLocaleString()}</p>
-                                                    </div>
-                                                    <button className="icon-btn purple" onClick={() => handleAddItem(item, 'service')}><Plus size={16} /></button>
-                                                </div>
-                                            ))}
-                                        </motion.div>
-                                    )}
-                                    {activeTab === 'presets' && (
-                                        <motion.div key="pres" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}>
-                                            {quotePresets.map(preset => (
-                                                <div key={preset.id} className="catalog-item glass-card" style={{ padding: '1rem', marginBottom: '10px', border: '1px solid var(--text-secondary)' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                                        <p style={{ fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{preset.name}</p>
-                                                        <button className="btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }} onClick={() => handleApplyPreset(preset)}>Aplicar Todo</button>
-                                                    </div>
-                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                                        {preset.items.map((i, idx) => (
-                                                            <span key={idx} style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
-                                                                {i.quantity}x {i.name}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        </div>
-
-                        {/* RIGHT: Current Quote Summary */}
-                        <div style={{
-                            background: 'var(--bg-black)',
-                            borderRadius: '20px',
-                            padding: '1.5rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            border: '1px solid var(--glass-border)',
-                            height: '100%',
-                            overflow: 'hidden'
-                        }}>
-                            <div style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem' }}>
-                                <h4 style={{ margin: 0, fontWeight: 700 }}>Conceptos en Cotización</h4>
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', fontWeight: 600 }}>Cliente: {formData.customer}</p>
-                            </div>
-
-                            <div className="summary-items-scroll" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '10px', marginBottom: '1rem' }}>
-                                {formData.items.length === 0 ? (
-                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
-                                        <ShoppingBag size={48} />
-                                        <p style={{ marginTop: '1rem', fontWeight: 600 }}>Sin conceptos añadidos</p>
-                                    </div>
-                                ) : (
-                                    formData.items.map((item, idx) => (
-                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.8rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                                <div style={{ padding: '6px', borderRadius: '8px', background: item.type === 'product' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: item.type === 'product' ? '#60a5fa' : '#34d399' }}>
-                                                    {item.type === 'product' ? <Box size={14} /> : <Briefcase size={14} />}
-                                                </div>
-                                                <div>
-                                                    <p style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{item.name}</p>
-                                                    <p style={{ fontSize: '0.75rem', opacity: 0.8, margin: 0, color: 'var(--text-secondary)', fontWeight: 600 }}>${item.price.toLocaleString()} x {item.quantity}</p>
-                                                </div>
-                                            </div>
-                                            <button className="icon-btn grey" onClick={() => handleRemoveItem(idx)}><Trash2 size={14} /></button>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-
-                            <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '2px solid var(--glass-border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.5rem' }}>
-                                    <div>
-                                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0, fontWeight: 600 }}>Importe Total Bruto</p>
-                                        <h2 style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 800 }}>${calculateTotal().toLocaleString()}</h2>
-                                    </div>
-                                    <button className="btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 700 }} onClick={() => setStep(1)}>Cambiar Cliente</button>
-                                </div>
-                                <button
-                                    className="btn-primary"
-                                    style={{ width: '100%', padding: '1rem', fontWeight: 800, letterSpacing: '0.02em' }}
-                                    disabled={formData.items.length === 0 || isSubmitting}
-                                    onClick={handleFinish}
-                                >
-                                    {isSubmitting ? 'Guardando...' : 'Confirmar y Finalizar Folio'}
-                                </button>
-                            </div>
-                        </div>
-
-                    </div>
-                )}
-            </motion.div>
-            <style>{`
-                .summary-items-scroll::-webkit-scrollbar { width: 4px; }
-                .summary-items-scroll::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 10px; }
-                .summary-items-scroll::-webkit-scrollbar-track { background: transparent; }
-            `}</style>
-        </div>
+  const setQuantity = (id: string, delta: number) =>
+    setItems((prev) =>
+      prev
+        .map((i) => (i._id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i))
+        .filter((i) => i.quantity > 0)
     );
+
+  const handleCreateCustomer = async () => {
+    if (!newCustomer.name.trim()) {
+      setError('El nombre del cliente es obligatorio');
+      return;
+    }
+    setSaving(true);
+    try {
+      await addCustomer({ ...newCustomer, name: newCustomer.name.trim(), status: 'potencial' });
+      setCustomer(newCustomer.name.trim());
+      setShowNewCustomer(false);
+      setNewCustomer(EMPTY_CUSTOMER);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo crear el cliente');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFinish = async () => {
+    if (!customer) { setError('Selecciona un cliente'); return; }
+    if (items.length === 0) { setError('Añade al menos un artículo'); return; }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await addQuote({
+        customer,
+        items: items.map((i) => ({
+          name: i.name,
+          price: Number(i.price) || 0,
+          quantity: Number(i.quantity) || 1,
+          type: i.type || 'product',
+          description: i.description || '',
+          discount: 0
+        })),
+        amount: total,
+        date: new Date().toISOString(),
+        // Nace como borrador, no como enviada.
+        //
+        // Antes se creaba con status 'sent', lo que rompía en silencio toda la
+        // automatización del PRD: mover el trato a 'Propuesta' exige una
+        // cotización en borrador (deals.js), y la cadena de cierre busca
+        // `status: 'draft'` para aprobarla y generar la cuenta por cobrar
+        // (dealClosedListener.js). Con 'sent' ninguna de las dos encontraba
+        // nada: el trato no avanzaba y al cerrarlo no se creaba ninguna CxC.
+        status: 'draft',
+        type: 'quick'
+      });
+      close();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'No se pudo guardar la cotización');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const catalogue = tab === 'products' ? products : services;
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={close}
+      title={
+        <span className="wizard-title">
+          <Zap size={20} />
+          {step === 1 ? 'Elegir cliente' : 'Armar propuesta'}
+        </span>
+      }
+      width="900px"
+      footer={
+        step === 1 ? (
+          <>
+            <Button variant="secondary" onClick={close}>Cancelar</Button>
+            <Button disabled={!customer} onClick={() => { setStep(2); setError(null); }}>
+              Continuar
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" icon={<ArrowLeft size={16} />} onClick={() => setStep(1)}>
+              Atrás
+            </Button>
+            <Button loading={saving} onClick={handleFinish}>
+              Guardar borrador · {currency(total)}
+            </Button>
+          </>
+        )
+      }
+    >
+      {error && <div className="alert alert--danger">{error}</div>}
+
+      {/* Indicador de paso */}
+      <div className="wizard-steps" aria-hidden>
+        <span className="is-done" />
+        <span className={step === 2 ? 'is-done' : ''} />
+      </div>
+
+      {step === 1 ? (
+        <>
+          {(customers || []).length === 0 && !showNewCustomer ? (
+            <EmptyState
+              icon={<Users size={32} />}
+              title="Sin clientes registrados"
+              description="Crea el primero para poder cotizarle."
+              action={<Button icon={<Plus size={18} />} onClick={() => setShowNewCustomer(true)}>Nuevo cliente</Button>}
+            />
+          ) : (
+            <div className="picker-grid">
+              {(customers || []).map((c: any) => (
+                <button
+                  key={c._id}
+                  type="button"
+                  className={`picker-card${customer === c.name ? ' is-selected' : ''}`}
+                  onClick={() => { setCustomer(c.name); setShowNewCustomer(false); }}
+                  aria-pressed={customer === c.name}
+                >
+                  <strong>{c.name}</strong>
+                  <small>{c.email || c.contact || 'Sin datos de contacto'}</small>
+                </button>
+              ))}
+
+              <button
+                type="button"
+                className={`picker-card picker-card--new${showNewCustomer ? ' is-selected' : ''}`}
+                onClick={() => { setShowNewCustomer(true); setCustomer(''); }}
+              >
+                <Plus size={22} />
+                <strong>Cliente nuevo</strong>
+              </button>
+            </div>
+          )}
+
+          {showNewCustomer && (
+            <div className="wizard-panel">
+              <h4>Datos del nuevo cliente</h4>
+              <div className="form-grid">
+                <div className="field--full">
+                  <Field label="Nombre o razón social" value={newCustomer.name} onChange={(v) => setNewCustomer({ ...newCustomer, name: v })} />
+                </div>
+                <Field label="Correo" type="email" value={newCustomer.email} onChange={(v) => setNewCustomer({ ...newCustomer, email: v })} />
+                <Field label="Teléfono" value={newCustomer.phone} onChange={(v) => setNewCustomer({ ...newCustomer, phone: v })} />
+              </div>
+              <Button loading={saving} onClick={handleCreateCustomer}>Crear y seleccionar</Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="wizard-build">
+          {/* ── Catálogo ─────────────────────────────────────────────────── */}
+          <div>
+            {/* La pestaña "presets" iteraba una lista que nunca se llenó: era una
+                sección permanentemente vacía. Se retira hasta que exista. */}
+            <Tabs
+              ariaLabel="Catálogo"
+              active={tab}
+              onChange={setTab}
+              items={[
+                { id: 'products', label: 'Productos', icon: <Box size={16} />, hint: products.length },
+                { id: 'services', label: 'Servicios', icon: <Briefcase size={16} />, hint: (services || []).length }
+              ]}
+            />
+
+            {catalogue.length === 0 ? (
+              <EmptyState
+                title={tab === 'products' ? 'Sin productos en el catálogo' : 'Sin servicios en el catálogo'}
+                description="Regístralos en el módulo de Inventario."
+              />
+            ) : (
+              <div className="catalogue-list">
+                {catalogue.map((item: any) => (
+                  <button key={item._id} type="button" className="catalogue-item" onClick={() => addItem(item)}>
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>{item.sku}</small>
+                    </span>
+                    <span className="catalogue-price">{currency(item.price)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Propuesta ────────────────────────────────────────────────── */}
+          <div className="wizard-panel wizard-cart">
+            <div className="conditions-head">
+              <h4>Propuesta para {customer}</h4>
+              <Badge tone="neutral">{items.length} {items.length === 1 ? 'línea' : 'líneas'}</Badge>
+            </div>
+
+            {items.length === 0 ? (
+              <p className="entity-field--empty">Pulsa un artículo del catálogo para añadirlo.</p>
+            ) : (
+              <ul className="cart-list">
+                {items.map((i) => (
+                  <li key={i._id}>
+                    <span className="cart-name">{i.name}</span>
+                    <span className="cart-qty">
+                      <button type="button" onClick={() => setQuantity(i._id, -1)} aria-label={`Quitar uno de ${i.name}`}>
+                        <Minus size={12} />
+                      </button>
+                      <b>{i.quantity}</b>
+                      <button type="button" onClick={() => setQuantity(i._id, 1)} aria-label={`Añadir uno de ${i.name}`}>
+                        <Plus size={12} />
+                      </button>
+                    </span>
+                    <span className="cart-total">{currency(i.price * i.quantity)}</span>
+                    <button
+                      type="button"
+                      className="icon-action icon-action--danger"
+                      onClick={() => setItems((prev) => prev.filter((x) => x._id !== i._id))}
+                      aria-label={`Eliminar ${i.name}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="cart-total-row">
+              <span>Total</span>
+              <strong>{currency(total)}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
 };
 
 export default QuoteWizard;

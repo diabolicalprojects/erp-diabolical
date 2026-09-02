@@ -32,16 +32,16 @@ const PublicQuoteViewer = () => {
 
     if (loading) return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#050505', color: 'white' }}>
-            <div style={{ width: '40px', height: '40px', border: '3px solid rgba(139,92,246,0.2)', borderTop: '3px solid var(--purple-main)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginBottom: '1rem' }} />
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', letterSpacing: '0.05em' }}>Cargando propuesta...</p>
+            <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.15)', borderTop: '3px solid #ffffff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginBottom: '1rem' }} />
+            <p style={{ color: '#a0a0a0', fontSize: '0.9rem', letterSpacing: '0.05em' }}>Cargando propuesta...</p>
         </div>
     );
 
     if (error || !data) return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#050505', color: 'white', padding: '2rem', textAlign: 'center' }}>
-            <AlertCircle size={48} color="var(--error)" style={{ marginBottom: '1rem' }} />
+            <AlertCircle size={48} color="#ef4444" style={{ marginBottom: '1rem' }} />
             <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Lo sentimos</h2>
-            <p style={{ color: 'var(--text-secondary)' }}>{error || 'No pudimos cargar la cotización.'}</p>
+            <p style={{ color: '#a0a0a0' }}>{error || 'No pudimos cargar la cotización.'}</p>
         </div>
     );
 

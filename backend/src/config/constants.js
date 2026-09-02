@@ -10,6 +10,9 @@ const PUBLIC_SETTINGS_FIELDS = [
   'companyPhone', 'companyEmail', 'companyWebsite',
   'logoUrl', 'accentColor', 'currency',
   'paymentConditions',
+  // Necesarios para que el visor público calcule el documento igual que el PDF
+  // interno. No son sensibles: ya figuran en la cotización que recibe el cliente.
+  'taxRate', 'validityDays',
   'signatureLabelLeft', 'signatureLabelRight',
   'footerNote'
 ];

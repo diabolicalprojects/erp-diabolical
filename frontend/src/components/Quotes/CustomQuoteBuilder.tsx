@@ -240,7 +240,7 @@ const ItemRow = ({ item, index, onChange, onDelete, onDuplicate, onToggleEdit })
                                 </div>
 
                                 {/* Subtotal preview */}
-                                <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '10px', background: 'var(--glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
                                         Subtotal: {item.quantity} {item.unit} × ${fmt(item.unitPrice)}
                                         {item.discount > 0 && ` − ${item.discount}%`}
@@ -250,7 +250,7 @@ const ItemRow = ({ item, index, onChange, onDelete, onDuplicate, onToggleEdit })
 
                                 <button
                                     onClick={() => onToggleEdit(item.id)}
-                                    style={{ marginTop: '12px', width: '100%', padding: '9px', borderRadius: '10px', border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                    style={{ marginTop: '12px', width: '100%', padding: '9px', borderRadius: '10px', border: '1px solid var(--glass-border)', background: 'var(--glass)', cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                                 >
                                     <CheckCircle size={14} /> Listo
                                 </button>
@@ -264,11 +264,11 @@ const ItemRow = ({ item, index, onChange, onDelete, onDuplicate, onToggleEdit })
 };
 
 // ─── Estilos base ─────────────────────────────────────────────────────────────
-const labelStyle = {
+const labelStyle: React.CSSProperties = {
     display: 'block', fontSize: '0.72rem', fontWeight: 700,
     color: 'var(--text-secondary)', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em'
 };
-const inputStyle = {
+const inputStyle: React.CSSProperties = {
     width: '100%', padding: '9px 12px', borderRadius: '10px',
     border: '1px solid var(--glass-border)', background: 'var(--glass)',
     color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none',
@@ -280,6 +280,7 @@ const inputStyle = {
 const CustomQuoteBuilder = ({ isOpen, onClose }) => {
     const { customers, quoteSettings, addQuote, addCustomer } = useApp();
     const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const [step, setStep] = useState(1); // 1 = cliente, 2 = ítems
     const [selectedCustomer, setSelectedCustomer] = useState('');
     const [customCustomer, setCustomCustomer] = useState('');
@@ -385,7 +386,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
             setTimeout(() => { onClose(); }, 1400);
         } catch (err) {
             console.error('Error guardando cotización:', err);
-            alert('Error al guardar la cotización. Intenta de nuevo.');
+            setSaveError('No se pudo guardar la cotización. Revisa los datos e intenta de nuevo.');
         } finally {
             setIsSaving(false);
         }
@@ -415,7 +416,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                 {/* ── Header ── */}
                 <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--glass)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Sparkles size={20} />
                         </div>
                         <div>
@@ -461,7 +462,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '1.5rem' }}>
                                     {customers.map(c => (
                                         <button
-                                            key={c.id}
+                                            key={c._id}
                                             onClick={() => { setSelectedCustomer(c.name); setCustomCustomer(''); }}
                                             style={{
                                                 textAlign: 'left', padding: '1rem 1.2rem', borderRadius: '14px', cursor: 'pointer',
@@ -471,7 +472,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                             }}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: selectedCustomer === c.name ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: selectedCustomer === c.name ? 'rgba(0,0,0,0.15)' : 'var(--glass)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                     <Users size={16} style={{ color: selectedCustomer === c.name ? 'var(--bg-black)' : 'var(--text-secondary)' }} />
                                                 </div>
                                                 <div>
@@ -553,7 +554,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                                 </div>
                                                 <button
                                                     onClick={handleAddItem}
-                                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.8rem' }}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '10px', border: '1px solid var(--glass-border)', background: 'var(--glass)', cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.8rem' }}
                                                 >
                                                     <Plus size={15} /> Agregar ítem
                                                 </button>
@@ -654,7 +655,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                                     disabled={items.length === 0 || hasErrors || saved || isSaving}
                                                     style={{
                                                         width: '100%', padding: '12px', borderRadius: '12px', cursor: 'pointer',
-                                                        background: saved ? 'rgba(16,185,129,0.15)' : isSaving ? 'rgba(255,255,255,0.1)' : 'var(--glass)',
+                                                        background: saved ? 'rgba(16,185,129,0.15)' : isSaving ? 'var(--glass-border)' : 'var(--glass)',
                                                         color: saved ? '#34d399' : isSaving ? 'var(--text-secondary)' : 'var(--text-primary)',
                                                         border: saved ? '1px solid #34d399' : '1px solid var(--text-primary)',
                                                         fontWeight: 800, fontSize: '0.88rem', opacity: (items.length === 0 || hasErrors) && !saved ? 0.4 : 1,
@@ -669,7 +670,7 @@ const CustomQuoteBuilder = ({ isOpen, onClose }) => {
                                                     disabled={items.length === 0 || hasErrors || saved || isSaving}
                                                     style={{
                                                         width: '100%', padding: '12px', borderRadius: '12px', cursor: 'pointer',
-                                                        background: saved ? 'rgba(16,185,129,0.15)' : isSaving ? 'rgba(255,255,255,0.1)' : 'var(--text-primary)',
+                                                        background: saved ? 'rgba(16,185,129,0.15)' : isSaving ? 'var(--glass-border)' : 'var(--text-primary)',
                                                         color: saved ? '#34d399' : isSaving ? 'var(--text-secondary)' : 'var(--bg-black)',
                                                         border: saved ? '1px solid #34d399' : 'none',
                                                         fontWeight: 800, fontSize: '0.88rem', opacity: (items.length === 0 || hasErrors) && !saved ? 0.4 : 1,

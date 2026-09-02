@@ -58,7 +58,9 @@ const DocDetailRow = ({ label, children }) => (
 const QuotePreview = ({ quote, isOpen, onClose }) => {
     const { quoteSettings, setQuoteSettings, updateQuote } = useApp();
     const [editMode, setEditMode] = useState(false);
-    const [ed, setEd] = useState({});
+    // `any` explícito: es un contenedor de campos editables de configuración,
+    // no una forma fija. Sin la anotación TS infiere `{}` y falla en cada acceso.
+    const [ed, setEd] = useState<any>({});
     const [isSaving, setIsSaving] = useState(false);
     const [saveToast, setSaveToast] = useState<{ type: string; text: string } | null>(null);
 
@@ -77,7 +79,7 @@ const QuotePreview = ({ quote, isOpen, onClose }) => {
             setQuoteSettings(res.data);
             setSaveToast({ type: 'success', text: '¡Guardado en configuración!' });
         } catch {
-            setSaveToast({ type: 'error', text: 'Error al guardar.' });
+            setSaveToast({ type: 'error', text: 'No se pudo guardar. Sólo un administrador puede cambiar estos datos.' });
         } finally {
             setIsSaving(false);
             setTimeout(() => setSaveToast(null), 3000);
