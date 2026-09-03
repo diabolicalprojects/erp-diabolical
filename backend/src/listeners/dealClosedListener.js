@@ -34,15 +34,31 @@ dealEmitter.on('deal:closed', async ({ deal }) => {
       console.warn(`${label} El trato no tiene client_id — se omite el cambio de estatus`);
     }
 
-    // ── 2. Cotización borrador -> 'accepted' ──────────────────────────────────
+    // ── 2. Cotización pendiente -> 'accepted' ─────────────────────────────────
+    //
+    // Se aceptan tanto 'draft' como 'sent'. Antes sólo se buscaba 'draft', lo
+    // que contradice el flujo real: la cotización se envía al cliente, el
+    // cliente acepta y entonces se cierra el trato — para ese momento está en
+    // 'sent'. Con el filtro anterior la cadena no encontraba nada justo en el
+    // caso más común, y el cierre no generaba ninguna cuenta por cobrar.
+    // El PRD §4B sólo pide marcarla como Aprobada; no restringe el origen.
+    const PENDING = ['draft', 'sent'];
+
     const approvedQuote = await Quote.findOneAndUpdate(
-      { deal_id: dealId, status: 'draft' },
+      { deal_id: dealId, status: { $in: PENDING } },
       { status: 'accepted' },
       { new: true, sort: { createdAt: -1 } }
     );
 
     if (!approvedQuote) {
-      console.warn(`${label} No hay cotización en borrador vinculada — no se genera CxC`);
+      // Se distingue el motivo: sin cotización vinculada, o con una que ya
+      // estaba resuelta. Antes ambos casos daban el mismo aviso.
+      const linked = await Quote.countDocuments({ deal_id: dealId });
+      console.warn(
+        linked === 0
+          ? `${label} El trato no tiene ninguna cotización vinculada — no se genera CxC`
+          : `${label} Las ${linked} cotización(es) del trato ya estaban aceptadas o rechazadas — no se genera CxC`
+      );
     } else {
       console.log(`${label} Cotización ${approvedQuote.folio} aprobada`);
 

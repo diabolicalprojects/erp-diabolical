@@ -50,13 +50,22 @@ router.patch('/:id/stage', auth, asyncHandler(async (req, res) => {
   const deal = await Deal.findById(req.params.id);
   if (!deal) throw new NotFoundError('Trato no encontrado');
 
-  // PRD §4A — 'propuesta' exige al menos una cotización en borrador
+  // PRD §4A — 'propuesta' exige una cotización vinculada.
+  //
+  // Desviación deliberada del texto literal del PRD, que dice "en estatus
+  // Borrador": si el vendedor ya envió la cotización al cliente, exigir que
+  // siga en borrador le impide avanzar el trato justo por haber hecho su
+  // trabajo. Lo que la validación busca es que exista una propuesta, no que
+  // esté sin enviar; se aceptan 'draft' y 'sent'.
   if (stage === 'propuesta') {
-    const draftQuote = await Quote.exists({ deal_id: deal._id, status: 'draft' });
-    if (!draftQuote) {
+    const quote = await Quote.exists({
+      deal_id: deal._id,
+      status: { $in: ['draft', 'sent'] }
+    });
+    if (!quote) {
       throw new BadRequestError(
-        'Se requiere al menos una cotización en estado Borrador vinculada a este trato para pasar a Propuesta.',
-        'MISSING_DRAFT_QUOTE'
+        'Se requiere al menos una cotización vinculada a este trato (en Borrador o Enviada) para pasar a Propuesta.',
+        'MISSING_QUOTE'
       );
     }
   }
