@@ -130,6 +130,58 @@ responde `401`. Se configura en el nodo *HTTP Request* de n8n que llama al ERP
 
 ---
 
+## Flujo del pipeline
+
+El recorrido comercial completo depende de un enlace que no es evidente en el
+código: **`Quote.deal_id`**, que se establece al crear la cotización buscando un
+trato abierto del mismo cliente por `client_id`.
+
+```
+Cliente (Customers)
+   │  client_id
+   ▼
+Trato (Deal) ──────────────┐
+   ▲                       │ deal_id
+   │ se enlazan por        ▼
+   │ client_id        Cotización (Quote)
+   │                       │
+   └───────────────────────┘
+```
+
+Consecuencias prácticas:
+
+- **Un trato sin `client_id` nunca recibe cotizaciones.** `POST /api/quotes`
+  busca el trato con `Deal.findOne({ client_id, stage: { $in: abiertas } })`.
+  Si el trato se creó sin ese campo, esa consulta no lo encuentra y se crea uno
+  nuevo, dejando el original bloqueado: pasar a Propuesta exige una cotización
+  vinculada, y ese trato ya nunca tendrá ninguna.
+  Por eso el alta de trato en el Pipeline pide elegir cliente.
+
+- **La cotización debe estar sin resolver al cerrar.** La cadena de cierre
+  busca `status ∈ {draft, sent}` para aprobarla y generar la cuenta por cobrar.
+  Una cotización ya `accepted` o `rejected` no vuelve a servir.
+
+Etapas y lo que exige cada transición:
+
+| Transición | Requisito |
+|---|---|
+| `nuevo` → `contacto` | ninguno |
+| `contacto` → `propuesta` | una cotización vinculada en Borrador o Enviada |
+| `propuesta` → `negociacion` | ninguno |
+| → `cierre` | confirmación en la interfaz |
+
+Al entrar en `cierre` se dispara `deal:closed`, que de forma asíncrona promueve
+el cliente a Activo, marca la cotización como Aceptada, genera la cuenta por
+cobrar con `deal_id` y `quote_id`, y envía el webhook saliente. Los tres
+primeros pasos no dependen del cuarto: si no hay webhook configurado, se omite
+con un aviso en el log y el resto ocurre igual.
+
+Todo esto queda registrado en el log del backend con el prefijo
+`[deal:closed | deal=<id>]`, que es la vía más rápida para diagnosticar un
+cierre que no produjo lo esperado.
+
+---
+
 ## Roles y permisos (PRD §5)
 
 Definidos en `backend/src/config/constants.js`, que es la fuente única: el
