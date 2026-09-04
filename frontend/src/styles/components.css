@@ -1701,3 +1701,56 @@ input:-webkit-autofill:focus {
     font-size: 1.2rem;
     font-variant-numeric: tabular-nums;
 }
+
+
+/* ── Desbordamiento de la barra lateral ────────────────────────────────────
+   El menú se recortaba en pantallas de poca altura: con diez módulos, el
+   logotipo y el pie, el contenido supera los 100vh de un portátil, y como
+   `.sidebar` no declara overflow, las últimas entradas —Configuración y
+   Seguridad— quedaban fuera de la pantalla sin ninguna forma de alcanzarlas.
+
+   `flex: 1` no basta: un elemento flex tiene `min-height: auto`, así que no
+   se encoge por debajo de su contenido y no genera su propia barra de
+   desplazamiento. `min-height: 0` es lo que se lo permite. */
+.sidebar-nav {
+    min-height: 0;
+    overflow-y: auto;
+    /* Espacio para que el último elemento no quede pegado al pie. */
+    padding-bottom: var(--space-2);
+    /* Barra de desplazamiento discreta; el menú no debe llamar la atención. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--glass-border) transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 3px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* El pie no debe encogerse cuando el menú desborda. */
+.sidebar-footer {
+    flex-shrink: 0;
+}
+
+/* 3rem de separación bajo el logotipo era espacio que se le quitaba al menú
+   justo donde falta. */
+.sidebar-logo {
+    flex-shrink: 0;
+    padding: 0.5rem 0 1.75rem;
+}
+
+/* `100dvh` descuenta la barra de direcciones del navegador móvil, que `100vh`
+   ignora y deja el pie por debajo del borde visible. */
+.sidebar {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}

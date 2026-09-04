@@ -21,10 +21,10 @@ const TUTORIAL_STEPS = [
   'El cierre pide confirmación porque no se puede deshacer.'
 ];
 
-const EMPTY_DEAL = { company: '', value: '', contact: '' };
+const EMPTY_DEAL = { customerId: '', company: '', value: '', contact: '' };
 
 const Pipeline = () => {
-  const { deals, setDeals, addDeal, deleteDeal } = useApp();
+  const { deals, setDeals, addDeal, deleteDeal, customers } = useApp();
 
   const [isModalOpen, setModalOpen] = useState(false);
   const [targetStage, setTargetStage] = useState('nuevo');
@@ -78,14 +78,23 @@ const Pipeline = () => {
   };
 
   const handleCreate = async () => {
-    if (!draft.company.trim()) {
-      setStageError('El nombre de la empresa es obligatorio');
+    const selected = (customers || []).find((c: any) => c._id === draft.customerId);
+    const company = (selected?.name || draft.company).trim();
+
+    if (!company) {
+      setStageError('Indica la empresa del trato');
       return;
     }
+
     try {
       await addDeal(targetStage, {
-        company: draft.company.trim(),
-        contact: draft.contact,
+        company,
+        // `client_id` es lo que enlaza el trato con sus futuras cotizaciones.
+        // Sin él, quotes.js no encuentra este trato —busca por client_id— y
+        // crea uno nuevo al cotizar, dejando el original atascado sin poder
+        // avanzar a Propuesta.
+        client_id: selected?._id || undefined,
+        contact: draft.contact || selected?.contact || '',
         value: Number(draft.value) || 0,
         days: 0
       });
@@ -222,7 +231,29 @@ const Pipeline = () => {
         }
       >
         <div className="stack">
-          <Field label="Empresa" value={draft.company} onChange={(v) => setDraft({ ...draft, company: v })} />
+          <label className="field">
+            <span className="field-label">Cliente</span>
+            <select
+              className="field-input"
+              value={draft.customerId}
+              onChange={(e) => setDraft({ ...draft, customerId: e.target.value, company: '' })}
+            >
+              <option value="">Empresa sin registrar…</option>
+              {(customers || []).map((c: any) => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {!draft.customerId && (
+            <Field
+              label="Nombre de la empresa"
+              value={draft.company}
+              onChange={(v) => setDraft({ ...draft, company: v })}
+              hint="Un trato sin cliente registrado no podrá avanzar a Propuesta: las cotizaciones se enlazan por cliente. Da de alta el cliente en Clientes para poder cerrarlo."
+            />
+          )}
+
           <Field label="Contacto" value={draft.contact} onChange={(v) => setDraft({ ...draft, contact: v })} />
           <Field label="Valor del trato" type="number" value={draft.value} onChange={(v) => setDraft({ ...draft, value: v })} />
         </div>
